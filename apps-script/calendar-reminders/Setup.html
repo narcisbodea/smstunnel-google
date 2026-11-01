@@ -239,18 +239,22 @@
           });
         }
 
-        /** Shows each error under its field; true when there was one. */
+        /** Shows each error under its field, and in the notice the ones that have no field in this dialog. */
         function showErrors(errors) {
           clearErrors();
           var first = null;
+          var elsewhere = [];
           Object.keys(errors || {}).forEach(function (name) {
             var el = document.querySelector('[data-error-for="' + name + '"]');
-            if (!el) return;
+            if (!el) {
+              elsewhere.push(errors[name]);
+              return;
+            }
             el.textContent = errors[name];
             if (!first) first = el;
           });
-          if (first) first.scrollIntoView({ block: 'center' });
-          return first !== null;
+          say(elsewhere.length ? elsewhere.join(' ') : 'Please check the fields marked in red.', 'bad');
+          if (first && !elsewhere.length) first.scrollIntoView({ block: 'center' });
         }
 
         function busy(on) {
@@ -544,7 +548,8 @@
           lines.push(meValues._time + ' Dentist', other + ' Call with Ana');
           D.preview(D.byId('agendaPreview'), lines.join('\n'));
           var minutes = interval();
-          D.byId('interval').textContent = minutes ? 'Checks your calendar every ' + (minutes >= 60 ? 'hour' : minutes + ' minutes') + '.' : '';
+          var every = minutes >= 60 ? 'hour' : minutes + ' minutes';
+          D.byId('interval').textContent = !minutes ? '' : data.on ? 'Checks your calendar every ' + every + '.' : 'Once on, it checks your calendar every ' + every + '.';
         }
 
         function load() {
@@ -652,10 +657,8 @@
           return D.callServer(fn, collect())
             .then(function (res) {
               if (!res.ok) {
-                if (res.errors) {
-                  D.showErrors(res.errors);
-                  D.say('Please check the fields marked in red.', 'bad');
-                } else D.say(res.message, 'bad');
+                if (res.errors) D.showErrors(res.errors);
+                else D.say(res.message, 'bad');
                 return res;
               }
               D.say(res.message, 'good');
@@ -675,8 +678,10 @@
           submit('smstunnelSaveSetup', 'Saving…').then(function (res) {
             if (!res || !res.ok) return;
             D.set('apiKey', '');
+            data.on = true;
             D.byId('state').textContent = 'On';
             D.byId('state').className = 'status on';
+            refresh();
           });
         });
         D.byId('test').addEventListener('click', function () {

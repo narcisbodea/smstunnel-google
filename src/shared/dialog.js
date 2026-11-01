@@ -37,18 +37,22 @@ var Dialog = (function () {
     });
   }
 
-  /** Shows each error under its field; true when there was one. */
+  /** Shows each error under its field, and in the notice the ones that have no field in this dialog. */
   function showErrors(errors) {
     clearErrors();
     var first = null;
+    var elsewhere = [];
     Object.keys(errors || {}).forEach(function (name) {
       var el = document.querySelector('[data-error-for="' + name + '"]');
-      if (!el) return;
+      if (!el) {
+        elsewhere.push(errors[name]);
+        return;
+      }
       el.textContent = errors[name];
       if (!first) first = el;
     });
-    if (first) first.scrollIntoView({ block: 'center' });
-    return first !== null;
+    say(elsewhere.length ? elsewhere.join(' ') : 'Please check the fields marked in red.', 'bad');
+    if (first && !elsewhere.length) first.scrollIntoView({ block: 'center' });
   }
 
   function busy(on) {

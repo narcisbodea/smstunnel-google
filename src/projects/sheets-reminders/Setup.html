@@ -248,7 +248,6 @@
             .then(function (res) {
               if (!res.ok) {
                 D.showErrors(res.errors);
-                D.say('Please check the fields marked in red.', 'bad');
                 return;
               }
               D.set('apiKey', '');

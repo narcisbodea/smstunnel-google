@@ -181,18 +181,22 @@
           });
         }
 
-        /** Shows each error under its field; true when there was one. */
+        /** Shows each error under its field, and in the notice the ones that have no field in this dialog. */
         function showErrors(errors) {
           clearErrors();
           var first = null;
+          var elsewhere = [];
           Object.keys(errors || {}).forEach(function (name) {
             var el = document.querySelector('[data-error-for="' + name + '"]');
-            if (!el) return;
+            if (!el) {
+              elsewhere.push(errors[name]);
+              return;
+            }
             el.textContent = errors[name];
             if (!first) first = el;
           });
-          if (first) first.scrollIntoView({ block: 'center' });
-          return first !== null;
+          say(elsewhere.length ? elsewhere.join(' ') : 'Please check the fields marked in red.', 'bad');
+          if (first && !elsewhere.length) first.scrollIntoView({ block: 'center' });
         }
 
         function busy(on) {
@@ -390,6 +394,7 @@
       (function () {
         var D = Dialog;
         var data = null;
+        var touched = false;
 
         function currentSheet() {
           var id = D.val('sheetId');
@@ -414,6 +419,17 @@
           return hit || '';
         }
 
+        /** On a first setup, a starting text made of the sheet's own columns. */
+        function suggestText() {
+          if (touched) return;
+          var sheet = currentSheet();
+          var name = guess(sheet, /name|client|customer/i);
+          var order = guess(sheet, /order|ticket|booking|job|invoice/i);
+          var status = D.val('statusColumn');
+          var hi = 'Hi' + (name ? ' {' + name + '}' : '') + ', ';
+          D.set('textBox', order && status ? hi + 'your order {' + order + '} is {' + status + '}.' : hi + 'an update from us: ' + (status ? '{' + status + '}' : '') + '.');
+        }
+
         function fillColumns(keep) {
           var sheet = currentSheet();
           var list = columns(sheet);
@@ -425,8 +441,12 @@
               return h && D.nameKey(h) !== D.nameKey(data.textedColumn);
             }),
             D.byId('textBox'),
-            refresh
+            function () {
+              touched = true;
+              refresh();
+            }
           );
+          if (!keep) suggestText();
           refresh();
         }
 
@@ -446,6 +466,7 @@
             .then(function (res) {
               data = res;
               var s = res.settings;
+              touched = res.configured === true;
               D.byId('state').textContent = res.on ? 'On' : 'Off';
               D.byId('state').className = res.on ? 'status on' : 'status';
               D.byId('textedName').textContent = res.textedColumn;
@@ -493,7 +514,6 @@
             .then(function (res) {
               if (!res.ok) {
                 D.showErrors(res.errors);
-                D.say('Please check the fields marked in red.', 'bad');
                 return;
               }
               D.set('apiKey', '');
@@ -512,7 +532,14 @@
         D.byId('sheetId').addEventListener('change', function () {
           fillColumns(false);
         });
-        D.byId('textBox').addEventListener('input', refresh);
+        D.byId('textBox').addEventListener('input', function () {
+          touched = true;
+          refresh();
+        });
+        D.byId('statusColumn').addEventListener('change', function () {
+          suggestText();
+          refresh();
+        });
         load();
       })();
     </script>
