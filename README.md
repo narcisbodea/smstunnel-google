@@ -121,6 +121,18 @@ Texts can use `{Title}`, `{Date}`, `{Time}`, `{Location}`, `{Calendar}`, `{In}` 
 - **One setup per file**: if two editors both run Set up, the latest one sends and the other one's trigger removes itself, so nobody gets a text twice.
 - **Turn texts off** removes the triggers; your settings and key stay, so Set up turns them back on.
 
+## Troubleshooting
+
+| What you see | What to do |
+| --- | --- |
+| No **SMSTunnel** menu | Reload the spreadsheet or the form's editor and wait a few seconds. In a form, the menu is only in the editor. |
+| "Google hasn't verified this app" | Expected for your own copy: **Advanced → Go to … (unsafe)** ([why](#googles-permission-screen-explained)). |
+| A text didn't go out | **Help** shows the last problem; the **SMSTunnel log** sheet (Forms: **Recent texts**) shows each text and why one was not sent. Check that your phone is online under **Phones** in your dashboard: when it's offline, texts wait and go out when it's back. |
+| "has no country code" | Write the number with `+` and the country code, or set the country code in **Set up → More settings**. |
+| Google emails "Summary of failures for Google Apps Script" | A run stopped on purpose, usually because the key was deleted or the chosen phone was unlinked. Open **Help**, then **Set up** to fix it. |
+| A row was not texted when its status changed | Its "Texted at" cell is not empty (a row is texted once), or another app changed it: turn on **Also check every 15 minutes**, or use **Send waiting texts now**. |
+| Texts arrive at odd times | Check the time zone: the spreadsheet's (**File → Settings**) for Sheets, the calendar's own for Calendar, the script's (**Apps Script → Project Settings**) for the Forms `{Time}`. |
+
 ## Use the library in your own scripts
 
 Add it as a library (**Libraries → +**, the SMSTunnel library's Script ID, identifier `SmsTunnel`; the Script ID is added here once the library is published), or paste [`apps-script/library/SmsTunnel.js`](apps-script/library/SmsTunnel.js) into your project. Both ways, you call `SmsTunnel.sendSms(...)`.
