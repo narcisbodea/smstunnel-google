@@ -298,6 +298,16 @@ describe('the menu and the trigger', () => {
     assert.match(missing.errors.ownerNumbers, /Add your own number/);
   });
 
+  test('the test reminder uses the soonest event across the chosen calendars', () => {
+    const cals = [
+      { id: 'me@example.com', name: 'Narcis', timeZone: TZ, primary: true, events: [{ id: 'later', title: 'Later thing', start: new Date(Date.now() + 3 * 86400000) }] },
+      { id: 'work@example.com', name: 'Work', timeZone: TZ, events: [{ id: 'soon', title: 'Soon thing', start: new Date(Date.now() + 3600000) }] },
+    ];
+    const { gas, api } = setup({ cals, input: { me: { calendars: ['me@example.com', 'work@example.com'] } } });
+    gas.run('smstunnelTestReminder');
+    assert.match(api.sent[0].message, /^Test: Reminder: Soon thing at /);
+  });
+
   test('with no event in the next 7 days, the test reminder is a made-up one', () => {
     const empty = [{ id: 'me@example.com', name: 'Narcis', timeZone: TZ, primary: true, events: [] }];
     const { gas, api } = setup({ cals: empty });

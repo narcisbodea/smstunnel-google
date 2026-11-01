@@ -42,7 +42,7 @@ In the editor that `open-script` opens:
 2. **Project Settings** → copy the **Script ID**.
 3. Put the Script ID in the README ("Use the library in your own scripts") and in the site page, in place of "added here once the library is published".
 
-To publish a new version later: `clasp push --force` and `clasp create-version "SMSTunnel 1.0.1"`. Library users keep the version they picked until they choose the new one under **Libraries**.
+To publish a new version later: change the version in `src/library/SmsTunnel.js` (the header and `VERSION`) and in `package.json`, run `npm run build` and `npm test`, then `clasp push --force` and `clasp create-version "SMSTunnel 1.0.1"`. Library users keep the version they picked until they choose the new one under **Libraries**.
 
 ## 2. The templates
 

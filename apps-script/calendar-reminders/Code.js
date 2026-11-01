@@ -659,6 +659,9 @@ function smstunnelTestReminderFor_(s, now) {
   var found = null;
   var calendars = s.me.calendars.length ? s.me.calendars : [CalendarApp.getDefaultCalendar().getId()];
   var events = smstunnelEvents_(calendars, now, new Date(now.getTime() + 7 * 86400000), { notes: [] });
+  events.sort(function (a, b) {
+    return a.event.getStartTime().getTime() - b.event.getStartTime().getTime();
+  });
   for (var i = 0; i < events.length && !found; i++) {
     var event = events[i].event;
     if (smstunnelDeclined_(event) || !smstunnelMatchesKeyword_(event, s.me.keyword)) continue;
