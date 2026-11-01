@@ -151,6 +151,16 @@ describe('the reminder run', () => {
     assert.match(html, /can.t read/);
   });
 
+  test('cells are escaped in the preview', () => {
+    const { gas } = setup({ sheetRows: [HEADERS, ['<b onmouseover=alert(1)>Ana</b>', '+40722000001', date(2026, 11, 2), time(14, 30)]], input: { message: 'Hi {Name}' } });
+    const settings = JSON.parse(gas.userProps.getProperty('SMSTUNNEL_SETTINGS'));
+    const outcome = gas.run('smstunnelRunReminders_', settings, NOW, { dryRun: true, ignoreQuiet: true });
+    assert.equal(outcome.plan.length, 1);
+    gas.run('smstunnelPreview');
+    const html = gas.ui.dialogs.at(-1).html;
+    assert.equal(html.includes('<b onmouseover'), false);
+  });
+
   test('Send due reminders now asks before sending outside the allowed hours', () => {
     const { gas, api } = setup({ sheetRows: [HEADERS, ['Ana', '+40722000001', { v: new Date(Date.now() + 3600000), d: 'soon' }, '']] });
     const settings = JSON.parse(gas.userProps.getProperty('SMSTUNNEL_SETTINGS'));

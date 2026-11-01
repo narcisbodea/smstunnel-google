@@ -198,6 +198,15 @@ describe('each response', () => {
     assert.match(gas.ui.dialogs.at(-1).html, /Last problem/);
   });
 
+  test('what respondents type is escaped in Recent texts', () => {
+    const { gas } = setup();
+    submit(gas, { 'Your name': 'Ana', 'Phone number': '<img src=x onerror=alert(1)>', 'Text me a confirmation': ['Yes'] });
+    gas.run('smstunnelRecentTexts');
+    const html = gas.ui.dialogs.at(-1).html;
+    assert.equal(html.includes('<img src=x'), false);
+    assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  });
+
   test('the key never shows in logs, recent texts or dialogs', () => {
     const api = fakeApi({ failWith: (request) => (request.url.endsWith('/sms/send') && JSON.parse(request.payload).to.endsWith('99') ? { throw: 'DNS error' } : null) });
     const { gas } = setup(api);
