@@ -333,12 +333,25 @@
           return String(name).replace(/\s+/g, ' ').trim().toLowerCase();
         }
 
-        /** The same filling the script does, for the previews. */
+        /** The same filling the script does (an empty value takes the space before it along), for the previews. */
         function fill(template, values) {
-          return String(template || '').replace(PLACEHOLDER, function (match, a, b) {
-            var key = nameKey(a || b);
-            return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
-          });
+          var source = String(template || '');
+          var pattern = new RegExp(PLACEHOLDER.source, 'g');
+          var out = '';
+          var last = 0;
+          var match;
+          while ((match = pattern.exec(source)) !== null) {
+            var key = nameKey(match[1] || match[2]);
+            var before = source.slice(last, match.index);
+            var value = Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match[0];
+            if (value === '') {
+              var next = source.charAt(match.index + match[0].length);
+              if (/[ \t]$/.test(before) && (next === '' || /[\s,.;:!?)]/.test(next))) before = before.replace(/[ \t]+$/, '');
+            }
+            out += before + value;
+            last = match.index + match[0].length;
+          }
+          return out + source.slice(last);
         }
 
         /** "92 characters · 1 text message", the way phones split long texts. */

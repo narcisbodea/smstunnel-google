@@ -101,6 +101,23 @@ function install() { ScriptApp.newTrigger('nowhere').timeBased().everyHours(1).c
   });
 });
 
+describe('dialog previews', () => {
+  test('the dialogs fill {placeholders} exactly like the script that sends the texts', async () => {
+    const vm = await import('node:vm');
+    const { createGas, fakeApi } = await import('../harness/gas.mjs');
+    const html = readFileSync(join(ROOT, 'apps-script', 'sheets-status-texts', 'Setup.html'), 'utf8');
+    const dialogJs = html.match(/<script>\s*(\/\* The parts every SMSTunnel setup dialog shares[\s\S]*?)<\/script>/)[1];
+    const context = vm.createContext({ document: {}, google: {} });
+    vm.runInContext(dialogJs, context);
+    const dialog = vm.runInContext('Dialog', context);
+    const kit = createGas({ project: 'sheets-status-texts', http: fakeApi(), spreadsheet: { sheets: [{ name: 'S' }] } }).global('SmsTunnelKit');
+    const values = { name: '', order: 'A-1', status: 'Shipped', amount: '$& 5' };
+    for (const template of ['Hi {Name}, order {Order} is {Status}.', 'Hi {Name}', '{Name}!', 'Hi {{ name }} and {Nope}', 'Total {Amount} ({Name})', '{ORDER}{order}', 'No placeholders']) {
+      assert.equal(dialog.fill(template, values), kit.fill(template, values).text, template);
+    }
+  });
+});
+
 describe('manifests', () => {
   test('each project asks only for what it uses', () => {
     for (const name of Object.keys(PROJECTS)) {
