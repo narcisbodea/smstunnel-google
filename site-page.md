@@ -28,7 +28,7 @@ Google Calendar stopped sending SMS notifications on 7 January 2019; since then 
 
 - **Remind me**: a text before each event, 5 minutes to a day before. Only the calendars you choose, and only events with a word you choose if you like ("dentist").
 - **My agenda**: one text every morning: *"Today, Mon, Nov 2: 9:00 AM Dentist, 2:00 PM Call with Ana."*
-- **Remind your clients**: for appointments, the person in the event gets a reminder from your number, the day before or a few hours before. Their number comes from a line like `SMS: +1 415 555 0123` in the event, or from your guest list.
+- **Remind your clients**: for appointments, the person in the event gets a reminder from your number, the day before or a few hours before. Their number comes from a line like `SMS: +1 415 555 0123` in the event, or, for guests you invite, from the list of their numbers you keep in the template's "Phone numbers" sheet.
 
 Each reminder goes out once. If an event moves, the new time gets one new text.
 
