@@ -88,6 +88,12 @@ describe('phone numbers, read the way the server reads them', () => {
     });
   }
 
+  test('a long value is quoted short in the reason', () => {
+    const result = S.normalizePhone('call me at the office or on my mobile, any time after nine', '+1');
+    assert.equal(result.ok, false);
+    assert.match(result.message, /^"call me at the office or on my mobile…" is not a phone number/);
+  });
+
   test('country codes are cleaned like the server cleans them', () => {
     for (const [input, out] of [['+49', '+49'], ['49', '+49'], ['0049', '+49'], [' +1 ', '+1'], ['+1268', '+1268'], ['RO', null], ['+0', null], ['', null], ['12345', null], [40, '+40']]) {
       assert.equal(S.cleanCountryCode(input), out, String(input));

@@ -209,9 +209,9 @@ const SmsTunnel = (function () {
   function normalizePhone(value, defaultCountryCode) {
     var raw = typeof value === 'number' && isFinite(value) ? String(value) : typeof value === 'string' ? value.trim() : '';
     if (!raw) return badNumber('EMPTY', 'There is no phone number.');
-    if (/[,;\r\n]/.test(raw)) return badNumber('SEVERAL', 'Only one number per text: "' + raw + '" looks like several.');
+    if (/[,;\r\n]/.test(raw)) return badNumber('SEVERAL', 'Only one number per text: ' + quoted(raw) + ' looks like several.');
     if (!NUMBER_SHAPE.test(raw)) {
-      return badNumber('NOT_A_NUMBER', '"' + raw + '" is not a phone number. Write it like +14155550123.');
+      return badNumber('NOT_A_NUMBER', quoted(raw) + ' is not a phone number. Write it like +14155550123.');
     }
     var number = raw.replace(/[\s.\-()]/g, '');
     if (number.indexOf('00') === 0) {
@@ -221,13 +221,13 @@ const SmsTunnel = (function () {
       if (!cc) {
         return badNumber(
           'NO_COUNTRY_CODE',
-          '"' + raw + '" has no country code. Write it with one, like +14155550123, or set the country code in Set up.'
+          quoted(raw) + ' has no country code. Write it with one, like +14155550123, or set the country code in Set up.'
         );
       }
       number = cc + (number.charAt(0) === '0' ? number.slice(1) : number);
     }
     if (!/^\+[0-9]{7,15}$/.test(number)) {
-      return badNumber('NOT_A_NUMBER', '"' + raw + '" is not a phone number (' + number + ' has too few or too many digits).');
+      return badNumber('NOT_A_NUMBER', quoted(raw) + ' is not a phone number (' + number + ' has too few or too many digits).');
     }
     for (var i = 0; i < BLOCKED_PREFIXES.length; i++) {
       if (number.indexOf(BLOCKED_PREFIXES[i]) === 0) return badNumber('BLOCKED', number + ' is a satellite number; SMSTunnel does not text those.');
@@ -236,6 +236,12 @@ const SmsTunnel = (function () {
       return badNumber('BLOCKED', number + ' is a short or premium-rate number; SMSTunnel does not text those.');
     }
     return { ok: true, number: number, reason: '', message: '' };
+  }
+
+  /** A value in quotes for a message, cut to 40 characters (a whole paragraph typed in a phone field stays readable). */
+  function quoted(value) {
+    var text = String(value);
+    return '"' + (text.length > 40 ? text.slice(0, 37) + '…' : text) + '"';
   }
 
   function badNumber(reason, message) {
@@ -376,9 +382,9 @@ const SmsTunnel = (function () {
     }
     var value = typeof to === 'number' && isFinite(to) ? String(to) : typeof to === 'string' ? to.trim() : '';
     if (!value) throw fail('The number is empty.', 'INVALID_NUMBER');
-    if (/[,;\r\n]/.test(value)) throw fail('Only one number per text: "' + value + '" looks like several.', 'INVALID_NUMBER');
+    if (/[,;\r\n]/.test(value)) throw fail('Only one number per text: ' + quoted(value) + ' looks like several.', 'INVALID_NUMBER');
     if (!NUMBER_SHAPE.test(value)) {
-      throw fail('"' + value + '" is not a phone number. Write it in international format, like +14155550123.', 'INVALID_NUMBER');
+      throw fail(quoted(value) + ' is not a phone number. Write it in international format, like +14155550123.', 'INVALID_NUMBER');
     }
     return value;
   }

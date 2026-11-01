@@ -572,10 +572,37 @@ const SmsTunnelKit = (function () {
 
   // ─── Forms: recent texts and responses already seen ─────────────────────────────────────────────────────
 
+  /** Keeps the last 20 texts for "Recent texts", short enough for one property (9 kB at most). */
   function remember(entry) {
     var list = recent();
-    list.unshift(entry);
-    PropertiesService.getUserProperties().setProperty(RECENT_PROPERTY, JSON.stringify(list.slice(0, 20)));
+    list.unshift({
+      at: String(entry.at || '').slice(0, 30),
+      kind: String(entry.kind || '').slice(0, 20),
+      to: String(entry.to || '').slice(0, 40),
+      result: String(entry.result || '').slice(0, 40),
+      details: String(entry.details || '').slice(0, 240),
+    });
+    list = list.slice(0, 20);
+    var json = JSON.stringify(list);
+    while (utf8Length(json) > 8000 && list.length > 1) {
+      list.pop();
+      json = JSON.stringify(list);
+    }
+    PropertiesService.getUserProperties().setProperty(RECENT_PROPERTY, json);
+  }
+
+  function utf8Length(text) {
+    var bytes = 0;
+    for (var i = 0; i < text.length; i++) {
+      var code = text.charCodeAt(i);
+      if (code < 0x80) bytes += 1;
+      else if (code < 0x800) bytes += 2;
+      else if (code >= 0xd800 && code <= 0xdbff) {
+        bytes += 4;
+        i++;
+      } else bytes += 3;
+    }
+    return bytes;
   }
 
   function recent() {

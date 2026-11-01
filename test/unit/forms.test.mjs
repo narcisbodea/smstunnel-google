@@ -198,6 +198,24 @@ describe('each response', () => {
     assert.match(gas.ui.dialogs.at(-1).html, /Last problem/);
   });
 
+  test('long answers never make Recent texts too big for its property (9 kB)', () => {
+    const api = fakeApi();
+    const { gas } = setup(api);
+    for (let i = 0; i < 25; i++) {
+      submit(gas, { 'Your name': 'Ana ' + i, 'Phone number': 'ç'.repeat(3000), 'Text me a confirmation': ['Yes'] });
+    }
+    const stored = gas.userProps.getProperty('SMSTUNNEL_RECENT');
+    assert.ok(Buffer.byteLength(stored) <= 8000, Buffer.byteLength(stored) + ' bytes');
+    assert.equal(api.sent.length, 50, 'your texts all went out');
+    assert.match(JSON.parse(stored)[0].details, /not a phone number/);
+  });
+
+  test('templates longer than a text are refused at setup', () => {
+    const { result } = setup(fakeApi(), { ownerMessage: 'x'.repeat(1601), confirmMessage: 'y'.repeat(1601) });
+    assert.match(result.errors.ownerMessage, /too long/);
+    assert.match(result.errors.confirmMessage, /too long/);
+  });
+
   test('what respondents type is escaped in Recent texts', () => {
     const { gas } = setup();
     submit(gas, { 'Your name': 'Ana', 'Phone number': '<img src=x onerror=alert(1)>', 'Text me a confirmation': ['Yes'] });

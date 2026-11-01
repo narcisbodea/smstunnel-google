@@ -102,6 +102,7 @@ function smstunnelSaveSetup(input) {
   var known = SMSTUNNEL_FORMS.special.concat(questions.map(function (q) { return q.title; }));
   var ownerMessage = String(data.ownerMessage || '').trim();
   if (!ownerMessage) errors.ownerMessage = 'Write the text you want to get.';
+  else if (SmsTunnel.textLength(ownerMessage) > 1600) errors.ownerMessage = 'The text is too long (at most 1600 characters).';
   else smstunnelCheckPlaceholders_(ownerMessage, known, 'ownerMessage', errors);
 
   var confirm = data.confirm === true;
@@ -118,6 +119,7 @@ function smstunnelSaveSetup(input) {
       else consentQuestionId = String(data.consentQuestionId);
     }
     if (!confirmMessage) errors.confirmMessage = 'Write the confirmation text.';
+    else if (SmsTunnel.textLength(confirmMessage) > 1600) errors.confirmMessage = 'The text is too long (at most 1600 characters).';
     else smstunnelCheckPlaceholders_(confirmMessage, known, 'confirmMessage', errors);
   }
 
