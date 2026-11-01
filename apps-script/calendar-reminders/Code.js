@@ -32,7 +32,7 @@ var SMSTUNNEL_CALENDAR = {
   meMessage: 'Reminder: {Title} at {Time} ({In})',
   clientMessage: 'Reminder: your appointment on {Date} at {Time}. Reply to this text if you need to change it.',
   labels: 'SMS, Phone, Mobile',
-  leads: [5, 10, 15, 30, 45, 60, 120, 180, 360, 720, 1440],
+  leads: [10, 15, 30, 45, 60, 120, 180, 360, 720, 1440],
   clientHours: [1, 2, 3, 6, 12, 24, 48, 72],
   agendaMinutes: [0, 15, 30, 45],
   placeholders: ['Title', 'Date', 'Time', 'Location', 'Calendar', 'In', 'Name'],
@@ -255,7 +255,7 @@ function smstunnelHelp() {
     '<p>Google Calendar stopped sending text (SMS) notifications in January 2019. This brings them back, from your own phone:</p><ul>' +
       '<li><b>Remind me</b>: a text to your own numbers ' + esc(smstunnelLeadWords_(s.me.lead)) + ' before each event' + (s.me.keyword ? ' whose title has "' + esc(s.me.keyword) + '"' : '') + '.</li>' +
       '<li><b>My agenda</b>: one text a day with the day\'s events.</li>' +
-      '<li><b>Reminders to people in your events</b>: the number on a line like "SMS: +1 415 555 0123" in the description, or a guest\'s number from the "' + esc(SMSTUNNEL_CALENDAR.phoneBookSheet) + '" sheet (Email, Phone, Name).</li></ul>' +
+      '<li><b>Reminders to people in your events</b>: the number on a line like "SMS: +1 415 555 0123" in the description, or a guest\'s number from the "' + esc(SMSTUNNEL_CALENDAR.phoneBookSheet) + '" sheet (Email, Phone, Name). Only events you created, unless you choose otherwise.</li></ul>' +
       '<p>Each text goes out once per event and number. If an event moves, its new time gets one new text. All-day events are left out unless you include them. Every text is listed in the "SMSTunnel log" sheet.</p>'
   );
 }
@@ -298,6 +298,7 @@ function smstunnelSettingsWithDefaults_(saved) {
       labels: clients.labels === undefined ? c.labels : String(clients.labels),
       fromDescription: clients.fromDescription === undefined ? true : clients.fromDescription === true,
       fromGuests: clients.fromGuests === undefined ? true : clients.fromGuests === true,
+      ownOnly: clients.ownOnly === undefined ? true : clients.ownOnly === true,
       quietFrom: clients.quietFrom === undefined ? 8 : Number(clients.quietFrom),
       quietTo: clients.quietTo === undefined ? 21 : Number(clients.quietTo),
       message: clients.message || c.clientMessage,
@@ -375,6 +376,7 @@ function smstunnelReadInput_(data, full) {
       labels: String(clients.labels || '').trim().slice(0, 200),
       fromDescription: clients.fromDescription === true,
       fromGuests: clients.fromGuests === true,
+      ownOnly: clients.ownOnly !== false,
       quietFrom: Math.floor(Number(clients.quietFrom)),
       quietTo: Math.floor(Number(clients.quietTo)),
       message: clients.on === true ? templateOf(clients.message, 'clientMessage') : String(clients.message || c.clientMessage),
@@ -451,6 +453,7 @@ function smstunnelLabels_(text) {
 function smstunnelRun_(s, now, options) {
   var opts = options || {};
   var outcome = { sent: 0, notSent: 0, waiting: 0, plan: [], notes: [], problem: '', stopped: '' };
+  if (!opts.dryRun) smstunnelPruneDaily_(now);
   var store = SmsTunnelKit.sentStore();
   var plan = [];
   if (s.me.on) plan = plan.concat(smstunnelPlanMe_(s, now, opts, outcome));
@@ -486,14 +489,16 @@ function smstunnelRun_(s, now, options) {
       continue;
     }
     if (outcome.sent > 0) SmsTunnelKit.pause();
-    var result = SmsTunnelKit.sendOne(item.to, item.text, s);
+    var result = SmsTunnelKit.sendOne(item.to, item.text, s, item.key);
     if (result.ok) {
       store.add(item.key, item.start);
       SmsTunnelKit.log(SMSTUNNEL_APP, {
         where: item.label,
         to: item.to,
         result: result.queued ? 'Waiting for your phone' : 'Sent',
-        details: (result.queued ? 'Your phone was offline: the text goes out when it is back online. ' : '') + 'Message id ' + result.messageId,
+        details: result.already
+          ? 'SMSTunnel already had a text for this from an earlier check.'
+          : (result.queued ? 'Your phone was offline: the text goes out when it is back online. ' : '') + 'Message id ' + result.messageId,
       });
       outcome.sent++;
       continue;
@@ -512,7 +517,6 @@ function smstunnelRun_(s, now, options) {
   if (outcome.waiting) {
     SmsTunnelKit.log(SMSTUNNEL_APP, { result: 'Waiting', details: outcome.waiting + ' more texts wait for the next check (at most ' + cap + ' per check).' });
   }
-  smstunnelPruneDaily_(now);
   return outcome;
 }
 
@@ -553,6 +557,8 @@ function smstunnelPlanClients_(s, now, opts, outcome) {
   smstunnelEvents_(c.calendars, now, new Date(horizon + 60000), outcome).forEach(function (found) {
     var event = found.event;
     if (event.isAllDayEvent() || smstunnelDeclined_(event)) return;
+    // An invitation from someone else could otherwise choose who gets a text from your phone.
+    if (c.ownOnly && !smstunnelOwnedByMe_(event)) return;
     var start = event.getStartTime();
     if (start.getTime() <= now.getTime()) return;
     var due = new Date(Math.max(now.getTime(), start.getTime() - leadMs));
@@ -571,19 +577,24 @@ function smstunnelPlanClients_(s, now, opts, outcome) {
       seen[phone.number] = true;
       people.push({ number: phone.number, name: name || '' });
     }
-    if (c.fromDescription) {
-      smstunnelNumbersInDescription_(event.getDescription(), labels).forEach(function (value) {
-        add(value, value, '');
-      });
-    }
-    if (c.fromGuests) {
-      event.getGuestList().forEach(function (guest) {
-        if (String(guest.getGuestStatus()) === String(CalendarApp.GuestStatus.NO)) return;
-        var entry = book[String(guest.getEmail()).toLowerCase()];
-        if (!entry) return;
-        var guestName = guest.getName && guest.getName() !== guest.getEmail() ? guest.getName() : '';
-        add(entry.raw, entry.display, entry.name || guestName);
-      });
+    try {
+      if (c.fromDescription) {
+        smstunnelNumbersInDescription_(event.getDescription(), labels).forEach(function (value) {
+          add(value, value, '');
+        });
+      }
+      if (c.fromGuests) {
+        event.getGuestList().forEach(function (guest) {
+          if (String(guest.getGuestStatus()) === String(CalendarApp.GuestStatus.NO)) return;
+          var entry = book[String(guest.getEmail()).toLowerCase()];
+          if (!entry) return;
+          var guestName = guest.getName && guest.getName() !== guest.getEmail() ? guest.getName() : '';
+          add(entry.raw, entry.display, entry.name || guestName);
+        });
+      }
+    } catch (e) {
+      outcome.notes.push('"' + SmsTunnelKit.truncate(event.getTitle() || '(no title)', 40) + '" could not be read (' + String((e && e.message) || e).slice(0, 80) + ').');
+      return;
     }
     if (people.length > SMSTUNNEL_CALENDAR.perEvent) {
       plan.push({
@@ -734,6 +745,15 @@ function smstunnelStart_(event, timeZone, allDayHour) {
   return SmsTunnelKit.dateAt(day, SmsTunnelKit.pad(allDayHour) + ':00', timeZone);
 }
 
+/** True for an event you created; false when it came as an invitation (or can't be told). */
+function smstunnelOwnedByMe_(event) {
+  try {
+    return event.isOwnedByMe() === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function smstunnelDeclined_(event) {
   try {
     return String(event.getMyStatus()) === String(CalendarApp.GuestStatus.NO);
@@ -811,7 +831,7 @@ function smstunnelNumbersInDescription_(description, labels) {
   smstunnelHtmlToText_(description)
     .split(/\r?\n/)
     .forEach(function (line) {
-      var m = /^\s*([A-Za-z][A-Za-z .'-]{0,30}?)\s*[:：]\s*(.+?)\s*$/.exec(line);
+      var m = /^\s*([^\d\s:\uFF1A+<>@/][^\d:\uFF1A+<>@/]{0,39}?)\s*[:\uFF1A]\s*(.+?)\s*$/.exec(line);
       if (!m) return;
       var label = SmsTunnelKit.nameKey(m[1]).replace(/\s+number$/, '');
       if (labels.indexOf(label) < 0) return;

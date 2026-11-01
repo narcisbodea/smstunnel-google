@@ -71,6 +71,24 @@ describe('Set up', () => {
     assert.match(same.result.errors.phoneColumn, /different column/);
   });
 
+  test('while another run holds the spreadsheet, Save waits: no settings, no triggers, rows not texted later', () => {
+    const gas = createGas({ project: 'sheets-status-texts', http: fakeApi(), spreadsheet: { sheets: [{ name: 'Orders', rows: rows() }] } });
+    const sheet = gas.spreadsheet.getSheetByName('Orders');
+    gas.locks.blocked = true;
+    const result = gas.run('smstunnelSaveSetup', { apiKey: KEY, sheetId: String(sheet.getSheetId()), statusColumn: 'Status', statusValue: 'Shipped', phoneColumn: 'Phone', message: 'Hi {Name}', countryCode: '+40', sweep: true, cap: 20 });
+    assert.equal(result.ok, false);
+    assert.match(result.errors.busy, /Click Save again/);
+    assert.equal(gas.triggers.length, 0);
+    assert.equal(gas.userProps.getProperty('SMSTUNNEL_SETTINGS'), null);
+  });
+
+  test('each text carries an Idempotency-Key named after its row', () => {
+    const { gas, sheet } = setup();
+    edit(gas, sheet, 2, 4, 'Shipped');
+    const [send] = gas.requests.filter((r) => r.url.endsWith('/sms/send'));
+    assert.match(send.headers['Idempotency-Key'], /^smstunnel-gas-/);
+  });
+
   test('the dialog data lists the sheets with their columns and a sample row', () => {
     const { gas } = setup();
     const data = gas.run('smstunnelGetSetupData');
@@ -157,18 +175,24 @@ describe('when the status changes', () => {
     sheet.getRange(7, 4).setValue('Shipped');
     gas.run('smstunnelCheckWaitingRows', { triggerUid: 'manual' });
     assert.equal(Object.prototype.toString.call(texted(sheet, 6)), '[object Date]');
-    assert.equal(texted(sheet, 7), '', 'left for the next run');
+    assert.equal(texted(sheet, 7), 'Sending…', 'left for the next run, with its key');
     assert.match(gas.spreadsheet.getSheetByName('SMSTunnel log').table().at(-1).join('|'), /Stopped\|SMSTunnel could not be reached/);
   });
 
-  test('a key that stopped working: nothing is marked, the run fails so Google tells you', () => {
+  test('a key that stopped working: the row waits as "Sending…", the run fails so Google tells you, and it goes out once fixed', () => {
     let refuse = false;
     const api = fakeApi({ failWith: (request) => (refuse && request.url.endsWith('/sms/send') ? { status: 401, body: { message: 'Invalid or expired API key', statusCode: 401 } } : null) });
     const { gas, sheet } = setup({ http: api });
     refuse = true;
     assert.throws(() => edit(gas, sheet, 2, 4, 'Shipped'), /did not accept the key/);
-    assert.equal(texted(sheet, 2), '');
+    assert.equal(texted(sheet, 2), 'Sending…');
     assert.match(gas.userProps.getProperty('SMSTUNNEL_LAST_PROBLEM'), /did not accept the key/);
+    refuse = false;
+    gas.run('smstunnelCheckWaitingRows', { triggerUid: 'manual' });
+    assert.equal(Object.prototype.toString.call(texted(sheet, 2)), '[object Date]');
+    const keys = gas.requests.filter((r) => r.url.endsWith('/sms/send')).map((r) => r.headers['Idempotency-Key']);
+    assert.equal(keys[0], keys[1], 'the same key both times');
+    assert.equal(gas.userProps.getProperty('SMSTUNNEL_LAST_PROBLEM'), null, 'a text that goes through clears the problem');
   });
 
   test('a renamed column stops the texts once, with a clear log line', () => {

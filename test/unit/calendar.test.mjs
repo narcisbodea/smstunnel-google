@@ -137,6 +137,8 @@ describe('Set up', () => {
     });
     assert.deepEqual(Object.keys(bad.result.errors).sort(), ['cap', 'clientCalendars', 'clientHours', 'clientMessage', 'clientQuiet', 'clientSources', 'meCalendars', 'meLead', 'meMessage', 'ownerNumbers'].sort());
     assert.match(bad.result.errors.meMessage, /\{Nope\}/);
+    const five = setup({ input: { me: { lead: 5 } } });
+    assert.match(five.result.errors.meLead, /Choose when/, '10 minutes is the shortest: two checks fall inside it');
   });
 });
 
@@ -240,6 +242,42 @@ describe('reminders to the people in your events', () => {
     assert.equal(gas.spreadsheet.getSheetByName('SMSTunnel log').table().filter((row) => row[4] === 'Not sent').length, 1);
     const night = setup({ input: clientsOnly });
     assert.equal(night.run(at(2, 22, 0)).sent, 0);
+  });
+
+  test('an invitation from someone else can\'t choose who gets a text, unless you allow it', () => {
+    const cals = calendars();
+    cals[1].events.push({ id: 'invite', title: 'Free gift', ownedByMe: false, start: new Date(NOW.getTime() + min(90)), description: 'SMS: +14155550199' });
+    const strict = setup({ input: clientsOnly, cals });
+    strict.run();
+    assert.equal(strict.api.sent.some((s) => s.to === '+14155550199'), false);
+    const open = setup({ input: { me: { on: false }, clients: { on: true, ownOnly: false } }, cals: calendars().map((c, i) => (i === 1 ? { ...c, events: [...c.events, { id: 'invite', title: 'Free gift', ownedByMe: false, start: new Date(NOW.getTime() + min(90)), description: 'SMS: +14155550199' }] } : c)) });
+    open.run();
+    assert.equal(open.api.sent.some((s) => s.to === '+14155550199'), true);
+  });
+
+  test('words in any language, and an event that can\'t be read doesn\'t stop the others', () => {
+    const cals = calendars();
+    cals[1].events = [
+      { id: 'fr', title: 'Coupe', start: new Date(NOW.getTime() + min(60)), description: 'Téléphone : +33 6 12 34 56 78' },
+      { id: 'ro', title: 'Tuns', start: new Date(NOW.getTime() + min(70)), description: 'Număr de telefon: 0722 123 456' },
+      { id: 'locked', title: 'Private', start: new Date(NOW.getTime() + min(80)), unreadable: true },
+    ];
+    const { run, api } = setup({ input: { me: { on: false }, clients: { on: true, labels: 'Téléphone, Număr de telefon' } }, cals });
+    const outcome = run();
+    assert.deepEqual(api.sent.map((s) => s.to), ['+33612345678', '+1722123456']);
+    assert.match(outcome.notes.join(' '), /"Private" could not be read/);
+  });
+
+  test('sends carry the reminder\'s own Idempotency-Key, the same on the next check', () => {
+    let fail = true;
+    const api = fakeApi({ failWith: (request) => (fail && request.url.endsWith('/sms/send') ? { status: 502, body: 'bad', headers: {} } : null) });
+    const { run, gas } = setup({ http: api });
+    run();
+    fail = false;
+    run(new Date(NOW.getTime() + 60000));
+    const keys = gas.requests.filter((r) => r.url.endsWith('/sms/send')).map((r) => r.headers['Idempotency-Key']);
+    assert.equal(keys[0], keys[1], 'the item that failed is sent again with the same key');
+    assert.equal(new Set(keys).size, 4, 'one key per text');
   });
 
   test('at most 10 people per event', () => {

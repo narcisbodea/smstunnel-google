@@ -151,6 +151,30 @@ describe('the library against the local API', () => {
     assert.equal(gas.requests.length, before);
   });
 
+  test('the same idempotencyKey twice: one text', async (t) => {
+    if (skip) return t.skip(skip);
+    const gas = gasFor('library');
+    gas.useKey(cfg.apiKey);
+    const S = gas.global('SmsTunnel');
+    const text = RUN + ' library: once';
+    const key = RUN + '-once';
+    const first = await politely(() => S.sendSms('+14155550145', text, { idempotencyKey: key }));
+    const second = await politely(() => S.sendSms('+14155550145', text, { idempotencyKey: key }));
+    await stored(text);
+    const count = await db.collection('messages').countDocuments({ message: text });
+    if (first.messageId !== second.messageId) return t.skip('this server build ignores Idempotency-Key (' + count + ' texts stored)');
+    assert.equal(count, 1);
+    const changed = (() => {
+      try {
+        S.sendSms('+14155550145', text + ' (changed)', { idempotencyKey: key });
+      } catch (err) {
+        return err;
+      }
+      return null;
+    })();
+    assert.equal(changed && changed.code, 'IDEMPOTENCY_KEY_REUSED');
+  });
+
   test('a wrong key is UNAUTHORIZED, an unknown message NOT_FOUND, and nothing is stored', async (t) => {
     if (skip) return t.skip(skip);
     const gas = gasFor('library');

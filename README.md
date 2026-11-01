@@ -12,7 +12,7 @@ Your phone needs the SMSTunnel app from Google Play:
 
 | Template | What it does |
 | --- | --- |
-| **SMSTunnel for Google Calendar** | A text to you before each event (5 minutes to a day before), your agenda each morning, and reminders to the people in your appointments. |
+| **SMSTunnel for Google Calendar** | A text to you before each event (10 minutes to a day before), your agenda each morning, and reminders to the people in your appointments. |
 | **SMSTunnel for Google Forms** | A text to you for each response, and an optional confirmation text to the person who answered. |
 | **SMSTunnel for Google Sheets: status texts** | When a row's status becomes the value you choose ("Shipped", "Ready"...), the number in that row gets your text, once. |
 | **SMSTunnel for Google Sheets: appointment reminders** | Each appointment in your sheet gets one reminder text a few hours before. |
@@ -80,21 +80,22 @@ You can remove the script's access anytime in your Google Account (**Security �
 
 The script lives in a spreadsheet, which keeps the log and, if you want, your guests' numbers. Set up has three parts; turn on the ones you want:
 
-- **Remind me before each event**: a text to your own numbers (up to 5, one text each) 5, 10, 15, 30 or 45 minutes, 1 to 12 hours, or a day before each event in the calendars you choose. Optionally only events whose title has a word you choose ("dentist, call"). All-day events are left out unless you include them (they then count as starting at the hour you choose, 8:00 by default).
+- **Remind me before each event**: a text to your own numbers (up to 5, one text each) 10, 15, 30 or 45 minutes, 1 to 12 hours, or a day before each event in the calendars you choose. Optionally only events whose title has a word you choose ("dentist, call"). All-day events are left out unless you include them (they then count as starting at the hour you choose, 8:00 by default).
 - **My agenda**: one text each day at the hour you choose: "Today, Mon, Nov 2: 9:00 AM Dentist, 2:00 PM Call with Ana". Days with nothing planned are skipped unless you say otherwise.
-- **Reminders to the people in your events**: for appointments. The person's number comes from a line in the event's description that starts with a word you choose and a colon, such as `SMS: +1 415 555 0123` or `Phone: 0722 123 456`, or from the **Phone numbers** sheet (Email, Phone, Name) for guests you invited. Other numbers in a description, such as a video call's dial-in line, are never used. Reminders to people go out only between the hours you choose (8:00 to 21:00 by default), at most 10 people per event.
+- **Reminders to the people in your events**: for appointments. The person's number comes from a line in the event's description that starts with a word you choose and a colon, such as `SMS: +1 415 555 0123` or `Phone: 0722 123 456`, or from the **Phone numbers** sheet (Email, Phone, Name) for guests you invited. Other numbers in a description, such as a video call's dial-in line, are never used. The word can be in any language (`Téléphone:`, `Telefon:`). Only events you created count, unless you untick **Only events you created**: otherwise an invitation from someone else could put a number in its description and choose who gets a text from your phone. Reminders to people go out only between the hours you choose (8:00 to 21:00 by default), at most 10 people per event.
 
 Texts can use `{Title}`, `{Date}`, `{Time}`, `{Location}`, `{Calendar}`, `{In}` ("in 15 min") and, for people, `{Name}`.
 
 - **Never twice**: each text is recorded (event, start time and number) in a hidden **SMSTunnel sent** sheet. If an event moves, its new time gets one new text. Declined events are left out.
-- **How often it checks**: every 5 minutes when you want a reminder 15 minutes or less before, every 10 minutes up to an hour, every 15 minutes otherwise or for the agenda, and every hour when only people get reminders. That stays well within Google's daily limits (below).
+- **How often it checks**: every 5 minutes when you want a reminder 10 or 15 minutes before (so two checks fall inside the time you chose), every 10 minutes up to an hour, every 15 minutes otherwise or for the agenda, and every hour when only people get reminders. That stays well within Google's daily limits (below).
 - **Menu**: Set up, **Send me a test reminder** (uses your next event, or a made-up one), **Preview the next texts** (what goes out in the next 24 hours, without sending anything), **Send due texts now**, **Turn texts off**, Help. The setup dialog has the same test button, so you can try your text before saving.
 
 ### SMSTunnel for Google Forms
 
 - For each response, a text to your own numbers (up to 5, one text each). The default text is `New response to {Form}:` followed by the answers; you can use `{Form}`, `{Answers}`, `{Time}`, `{Email}` and any question's title, like `{Your name}`.
-- Optionally, a confirmation text to the person who answered, at the number they typed in a short-answer question you choose. You can also choose a consent question (for example a checkbox "Text me a confirmation"): the confirmation then goes out only when it's ticked. Tell people in the form that you will text them.
+- Optionally, a confirmation text to the person who answered, at the number they typed in a short-answer question you choose. You can also choose a consent box: a checkbox question such as "Text me a confirmation", whose first box means yes; the confirmation then goes out only when that box is ticked. Tell people in the form that you will text them.
 - An edited response sends you a new text marked "Edited"; the confirmation goes out once per response.
+- `{Time}` uses the time zone in **Set up → More settings** (your browser's, the first time).
 - **Recent texts** in the menu lists the last 20 texts and why any did not go out.
 
 ### SMSTunnel for Google Sheets: status texts
@@ -115,6 +116,7 @@ Texts can use `{Title}`, `{Date}`, `{Time}`, `{Location}`, `{Calendar}`, `{In}` 
 ### What all templates share
 
 - **Numbers**: write them in international format, like `+14155550123`. Tip: **Format → Number → Plain text** keeps the `+` in a cell. Numbers without a country code need the country code in Set up; without it they are skipped, so a text never goes to a number in the wrong country.
+- **Never twice, even when an answer gets lost**: each text carries a key (`Idempotency-Key`) that names it. If a run stops after SMSTunnel took a text but before the answer came back, the next run sends with the same key and SMSTunnel answers with the first result instead of texting twice. In the Sheets templates, a row shows **Sending…** while that is open; the next run finishes it.
 - **The log**: every text, and every row or event that could not be texted, is listed in the **SMSTunnel log** sheet (the last 2000 lines). The Forms template shows **Recent texts** instead.
 - **When something stops the texts** (a deleted key, a phone no longer linked), the run fails on purpose, so Google emails you about it, and **Help** shows the last problem. Short outages and "too many texts" just wait for the next run.
 - **Your phone offline**: the text waits and goes out as soon as the phone is back online.
@@ -131,7 +133,8 @@ Texts can use `{Title}`, `{Date}`, `{Time}`, `{Location}`, `{Calendar}`, `{In}` 
 | "has no country code" | Write the number with `+` and the country code, or set the country code in **Set up → More settings**. |
 | Google emails "Summary of failures for Google Apps Script" | A run stopped on purpose, usually because the key was deleted or the chosen phone was unlinked. Open **Help**, then **Set up** to fix it. |
 | A row was not texted when its status changed | Its "Texted at" cell is not empty (a row is texted once), or another app changed it: turn on **Also check every 15 minutes**, or use **Send waiting texts now**. |
-| Texts arrive at odd times | Check the time zone: the spreadsheet's (**File → Settings**) for Sheets, the calendar's own for Calendar, the script's (**Apps Script → Project Settings**) for the Forms `{Time}`. |
+| A row shows **Sending…** | A try that may not have gone through (the server was busy, or the key stopped working). The next change or run sends it with the same key, so it never goes out twice. |
+| Texts arrive at odd times | Check the time zone: the spreadsheet's (**File → Settings**) for Sheets, the calendar's own for Calendar, **Set up → More settings** for the Forms `{Time}`. |
 
 ## Use the library in your own scripts
 
@@ -163,7 +166,7 @@ function textThisRow() {
 
 | Function | What it does |
 | --- | --- |
-| `sendSms(to, message, options)` | One text to one number. `options`: `deviceId` (one of your phones), `defaultCountryCode` (like `"+1"`, for numbers without `+` or `00`), `serverUrl`, `apiKey`. Returns `{ messageId, queued, branded, remaining }`; `queued` is true when your phone was offline (the text waits). |
+| `sendSms(to, message, options)` | One text to one number. `options`: `deviceId` (one of your phones), `defaultCountryCode` (like `"+1"`, for numbers without `+` or `00`), `idempotencyKey` (a name for this one text, like `"order-17-shipped"`: sent again with the same key within 24 hours, SMSTunnel answers with the first result instead of a second text), `serverUrl`, `apiKey`. Returns `{ messageId, queued, branded, remaining }`; `queued` is true when your phone was offline (the text waits). |
 | `sendCode(to, message, options)` | A sign-in code, through the separate allowance for codes. The text must hold a code of 4 to 10 digits standing on its own (`482913`, `12-345678`) or `123-456`, at most 320 characters; otherwise nothing is sent (`NO_CODE`). |
 | `getStatus(messageId)` | `pending`, `sent`, `delivered` or `failed`, with times. |
 | `getPhones()` | Your phones: `id`, `name`, `isOnline`, `lastSeenAt`. |
@@ -184,6 +187,8 @@ Every function throws an `Error` named `SmsTunnelError` when a text can't be han
 | `PERMISSION_REQUIRED` or `FORBIDDEN` | 403 | no | The key lacks a permission (`error.permission` says which), or your plan doesn't include it. |
 | `NOT_FOUND` | 404 | no | No such message or phone for this key. |
 | `RATE_LIMITED` | 429 | yes | Too many texts in a short time; `error.retryAfter` gives the seconds to wait. |
+| `IDEMPOTENCY_KEY_IN_PROGRESS` | 409 | yes | The first request with this `idempotencyKey` is still running. |
+| `IDEMPOTENCY_KEY_REUSED` | 422 | no | This `idempotencyKey` was used in the last 24 hours for a different text: use a new key for a new text. |
 | `SERVER_ERROR`, `NETWORK_ERROR` | 5xx, 0 | yes | SMSTunnel couldn't be reached; try again a little later. |
 | `REDIRECT`, `INVALID_RESPONSE`, `HTTP_ERROR` | other | no | Something between you and SMSTunnel answered instead. |
 
@@ -229,6 +234,8 @@ API facts:
   403 = the key lacks a permission (code PERMISSION_REQUIRED) or the plan doesn't allow it, 429 = too many
   requests (retryable, retryAfter in seconds), 5xx and network errors = retryable.
 - When my phone is offline the text waits (queued: true) and goes out as soon as the phone is back online.
+- Optional { idempotencyKey: "..." } (the Idempotency-Key header): a retry with the same key within 24 hours gets
+  the first answer instead of sending a second text. Use one key per text you mean to send.
 
 What I want: [describe what should send a text, to whom, and when]
 

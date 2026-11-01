@@ -55,7 +55,7 @@ function smstunnelGetSetupData() {
     setup: state,
     on: state === 'mine' && s.enabled === true && SmsTunnelKit.countTriggers(SMSTUNNEL_APP.handlers) > 0,
     formTitle: form.getTitle(),
-    timeZone: Session.getScriptTimeZone(),
+    configured: !!s.ownerMessage,
     special: SMSTUNNEL_FORMS.special,
     questions: smstunnelFormQuestions_(form),
     settings: {
@@ -67,6 +67,7 @@ function smstunnelGetSetupData() {
       confirmMessage: s.confirmMessage || SMSTUNNEL_FORMS.confirmMessage,
       countryCode: s.countryCode || '',
       deviceId: s.deviceId || '',
+      timeZone: s.timeZone || '',
     },
   };
 }
@@ -108,15 +109,21 @@ function smstunnelSaveSetup(input) {
   var confirm = data.confirm === true;
   var phoneQuestion = null;
   var consentQuestionId = '';
+  var consentChoice = '';
   var confirmMessage = String(data.confirmMessage || '').trim();
   if (confirm) {
     phoneQuestion = smstunnelFindQuestion_(questions, data.phoneQuestionId);
     if (!phoneQuestion) errors.phoneQuestionId = 'Choose the question where people type their phone number.';
     else if (phoneQuestion.type !== 'TEXT') errors.phoneQuestionId = 'Choose a short-answer question (people type their number in it).';
     if (data.consentQuestionId) {
-      if (!smstunnelFindQuestion_(questions, data.consentQuestionId)) errors.consentQuestionId = 'That question is no longer in the form.';
-      else if (String(data.consentQuestionId) === String(data.phoneQuestionId)) errors.consentQuestionId = 'Choose a different question than the phone question.';
-      else consentQuestionId = String(data.consentQuestionId);
+      var consent = smstunnelFindQuestion_(questions, data.consentQuestionId);
+      if (!consent) errors.consentQuestionId = 'That question is no longer in the form.';
+      else if (consent.type !== 'CHECKBOX' || !consent.choices.length) {
+        errors.consentQuestionId = 'Choose a checkbox question, like "Text me a confirmation": its first box is the yes.';
+      } else {
+        consentQuestionId = String(consent.id);
+        consentChoice = consent.choices[0];
+      }
     }
     if (!confirmMessage) errors.confirmMessage = 'Write the confirmation text.';
     else if (SmsTunnel.textLength(confirmMessage) > 1600) errors.confirmMessage = 'The text is too long (at most 1600 characters).';
@@ -125,6 +132,11 @@ function smstunnelSaveSetup(input) {
 
   var deviceId = String(data.deviceId || '').trim();
   if (deviceId && !/^[A-Za-z0-9_-]{1,64}$/.test(deviceId)) errors.deviceId = 'Choose a phone from the list.';
+
+  var timeZone = String(data.timeZone || '').trim();
+  if (timeZone && !/^(UTC|GMT|Etc\/[A-Za-z0-9+_-]{1,20}|[A-Za-z]{2,20}(\/[A-Za-z0-9_+-]{2,30}){1,2})$/.test(timeZone)) {
+    errors.timeZone = 'Write a time zone like Europe/Bucharest or America/New_York.';
+  }
 
   var keyProblem = SmsTunnelKit.keyProblem(data.apiKey);
   if (keyProblem) errors.apiKey = keyProblem;
@@ -139,9 +151,11 @@ function smstunnelSaveSetup(input) {
     confirm: confirm,
     phoneQuestionId: confirm ? String(phoneQuestion.id) : '',
     consentQuestionId: confirm ? consentQuestionId : '',
+    consentChoice: confirm ? consentChoice : '',
     confirmMessage: confirmMessage || SMSTUNNEL_FORMS.confirmMessage,
     countryCode: countryCode,
     deviceId: deviceId,
+    timeZone: timeZone,
   });
   SmsTunnelKit.removeTriggers(SMSTUNNEL_APP.handlers);
   SmsTunnelKit.claimSetup();
@@ -153,7 +167,7 @@ function smstunnelSaveSetup(input) {
     ok: true,
     message:
       'Texts are on. Each new response sends a text to ' + who + '.' +
-      (confirm ? ' The person who answered gets a confirmation at the number they typed' + (consentQuestionId ? ', when they tick your consent question.' : '.') : ''),
+      (confirm ? ' The person who answered gets a confirmation at the number they typed' + (consentQuestionId ? ', when they tick "' + consentChoice + '".' : '.') : ''),
   };
 }
 
@@ -166,10 +180,7 @@ function smstunnelOnFormSubmit(e) {
     return;
   }
   var form = e.source || FormApp.getActiveForm();
-  var outcome = SmsTunnelKit.withLock(function () {
-    return smstunnelHandleResponse_(form, e.response, settings);
-  }, 30000);
-  if (outcome.busy) throw new Error('SMSTunnel for Google Forms: another run held the form for 30 s, so this response was not texted.');
+  var outcome = smstunnelHandleResponse_(form, e.response, settings);
   if (outcome.problem) {
     // Google emails you about a trigger run that fails, so a key that stopped working doesn't go unnoticed.
     throw new Error('SMSTunnel for Google Forms: ' + outcome.problem);
@@ -208,7 +219,7 @@ function smstunnelHelp() {
     SMSTUNNEL_APP,
     '<p>For each response to this form you get a text at your own numbers, one text per number. If you turn it on, the person who answered gets a confirmation at the number they typed.</p>' +
       '<p>Texts go out from your phone right after the response comes in. An edited response sends you a new text marked "Edited"; a confirmation goes out once per response.</p>' +
-      '<p class="muted">Times in your texts use the script\'s time zone, ' + SmsTunnelKit.escapeHtml(Session.getScriptTimeZone()) + ' (Apps Script → Project Settings to change it).</p>'
+      '<p class="muted">Times in your texts use the time zone ' + SmsTunnelKit.escapeHtml((SmsTunnelKit.loadSettings() || {}).timeZone || Session.getScriptTimeZone()) + ' (Set up → More settings).</p>'
   );
 }
 
@@ -216,9 +227,14 @@ function smstunnelHelp() {
 
 function smstunnelHandleResponse_(form, response, settings) {
   var answers = smstunnelAnswers_(response);
-  var values = smstunnelValues_(form, response, answers);
-  var edited = SmsTunnelKit.seenBefore(response.getId());
-  var outcome = { sent: 0, skipped: 0, problem: '' };
+  var values = smstunnelValues_(form, response, answers, settings);
+  // Only the shared lists are locked, briefly; the texts go out without holding up other responses.
+  var edited = SmsTunnelKit.withLock(function () {
+    return SmsTunnelKit.seenBefore(response.getId());
+  }, 60000);
+  if (edited !== true) edited = false;
+  var once = 'forms|' + response.getId() + '|' + response.getTimestamp().getTime();
+  var outcome = { sent: 0, skipped: 0, problem: '', once: once };
 
   var ownerText = SmsTunnelKit.fill(settings.ownerMessage || SMSTUNNEL_FORMS.ownerMessage, values).text;
   ownerText = SmsTunnelKit.truncate((edited ? 'Edited: ' : '') + ownerText, 1600);
@@ -238,7 +254,7 @@ function smstunnelConfirm_(answers, values, settings, outcome) {
     smstunnelSkip_('', 'No confirmation: the phone question was left empty.', outcome);
     return;
   }
-  if (settings.consentQuestionId && !smstunnelAnswerFor_(answers, settings.consentQuestionId)) {
+  if (settings.consentQuestionId && !smstunnelConsented_(answers, settings)) {
     smstunnelSkip_('', 'No confirmation: the consent question was not ticked.', outcome);
     return;
   }
@@ -256,15 +272,16 @@ function smstunnelConfirm_(answers, values, settings, outcome) {
 }
 
 function smstunnelSend_(number, text, settings, kind, outcome) {
-  var result = SmsTunnelKit.sendOne(number, text, settings);
+  var once = outcome.once + '|' + kind;
+  var result = SmsTunnelKit.sendOne(number, text, settings, once);
   if (!result.ok && result.kind === 'transient') {
-    // A response comes only once, so wait a little and try a second time.
+    // A response comes only once, so wait a little and try a second time, with the same key: never two texts.
     Utilities.sleep(Math.min(20, Math.max(3, Number(result.error.retryAfter) || 5)) * 1000);
-    result = SmsTunnelKit.sendOne(number, text, settings);
+    result = SmsTunnelKit.sendOne(number, text, settings, once);
   }
   if (result.ok) {
     outcome.sent++;
-    SmsTunnelKit.remember({
+    smstunnelRemember_({
       at: new Date().toISOString(),
       kind: kind,
       to: number,
@@ -274,7 +291,7 @@ function smstunnelSend_(number, text, settings, kind, outcome) {
     return;
   }
   outcome.skipped++;
-  SmsTunnelKit.remember({ at: new Date().toISOString(), kind: kind, to: number, result: 'Not sent', details: result.explain });
+  smstunnelRemember_({ at: new Date().toISOString(), kind: kind, to: number, result: 'Not sent', details: result.explain });
   console.warn('SMSTunnel for Google Forms: no text to ' + SmsTunnelKit.mask(number) + ': ' + result.explain);
   if (result.kind === 'account') {
     outcome.problem = result.explain;
@@ -284,7 +301,25 @@ function smstunnelSend_(number, text, settings, kind, outcome) {
 
 function smstunnelSkip_(to, why, outcome) {
   outcome.skipped++;
-  SmsTunnelKit.remember({ at: new Date().toISOString(), kind: 'confirmation', to: String(to || ''), result: 'Not sent', details: why });
+  smstunnelRemember_({ at: new Date().toISOString(), kind: 'confirmation', to: String(to || ''), result: 'Not sent', details: why });
+}
+
+/** "Recent texts" is shared by every run: it is updated under the form's lock (and skipped if the form stays busy). */
+function smstunnelRemember_(entry) {
+  SmsTunnelKit.withLock(function () {
+    SmsTunnelKit.remember(entry);
+  }, 20000);
+}
+
+/** True when the consent checkbox's first box (the yes) is ticked. */
+function smstunnelConsented_(answers, settings) {
+  for (var i = 0; i < answers.length; i++) {
+    if (answers[i].id !== String(settings.consentQuestionId)) continue;
+    var raw = answers[i].raw;
+    var ticked = Array.isArray(raw) ? raw : [raw];
+    return ticked.map(String).indexOf(String(settings.consentChoice)) >= 0;
+  }
+  return false;
 }
 
 /** Questions people answer (not section headers, images or videos). */
@@ -295,7 +330,17 @@ function smstunnelFormQuestions_(form) {
       return SMSTUNNEL_FORMS.questionTypes.indexOf(String(item.getType())) >= 0;
     })
     .map(function (item) {
-      return { id: String(item.getId()), title: item.getTitle(), type: String(item.getType()) };
+      var type = String(item.getType());
+      var choices = [];
+      if (type === 'CHECKBOX') {
+        choices = item
+          .asCheckboxItem()
+          .getChoices()
+          .map(function (choice) {
+            return choice.getValue();
+          });
+      }
+      return { id: String(item.getId()), title: item.getTitle(), type: type, choices: choices };
     });
 }
 
@@ -328,7 +373,7 @@ function smstunnelAnswers_(response) {
         .filter(Boolean)
         .join(', ');
     } else text = value === null || value === undefined ? '' : String(value);
-    return { id: String(item.getId()), title: item.getTitle(), text: text.trim() };
+    return { id: String(item.getId()), title: item.getTitle(), text: text.trim(), raw: value };
   });
 }
 
@@ -339,11 +384,12 @@ function smstunnelAnswerFor_(answers, id) {
   return '';
 }
 
-function smstunnelValues_(form, response, answers) {
+function smstunnelValues_(form, response, answers, settings) {
   var key = SmsTunnelKit.nameKey;
   var values = {};
+  var timeZone = (settings && settings.timeZone) || Session.getScriptTimeZone();
   values[key('Form')] = form.getTitle();
-  values[key('Time')] = Utilities.formatDate(response.getTimestamp(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+  values[key('Time')] = Utilities.formatDate(response.getTimestamp(), timeZone, 'yyyy-MM-dd HH:mm');
   values[key('Email')] = response.getRespondentEmail ? response.getRespondentEmail() || '' : '';
   values[key('Answers')] = answers
     .filter(function (answer) {

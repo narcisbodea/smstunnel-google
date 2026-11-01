@@ -333,7 +333,7 @@ function smstunnelRunReminders_(settings, now, options) {
   var horizon = now.getTime() + Number(settings.hoursBefore) * 3600000;
   var due = [];
   for (var i = 0; i < raw.length; i++) {
-    if (String(display[i][layout.sent - 1]).trim() !== '') continue;
+    if (!smstunnelPending_(display[i][layout.sent - 1])) continue;
     var dateValue = raw[i][layout.date - 1];
     if (dateValue === '' || dateValue === null) continue;
     var start = smstunnelStartOf_(dateValue, layout.time ? raw[i][layout.time - 1] : '', timeZone);
@@ -378,10 +378,12 @@ function smstunnelRunReminders_(settings, now, options) {
       continue;
     }
     if (outcome.sent > 0) SmsTunnelKit.pause();
-    var result = SmsTunnelKit.sendOne(plan.to, plan.text, settings);
+    var once = smstunnelStartSending_(layout, plan.row);
+    var result = SmsTunnelKit.sendOne(plan.to, plan.text, settings, once);
     if (result.ok) {
-      smstunnelMarkRow_(layout, plan.row, new Date(), 'Reminder sent to ' + plan.to + (result.queued ? ' (your phone was offline: it goes out when the phone is back online)' : '') + '\nMessage id: ' + result.messageId);
-      SmsTunnelKit.log(SMSTUNNEL_APP, { where: 'Row ' + plan.row, to: plan.to, result: result.queued ? 'Waiting for your phone' : 'Sent', details: 'Message id ' + result.messageId });
+      var how = result.already ? 'SMSTunnel already had this reminder from an earlier try' : 'Message id: ' + result.messageId;
+      smstunnelMarkRow_(layout, plan.row, new Date(), 'Reminder sent to ' + plan.to + (result.queued ? ' (your phone was offline: it goes out when the phone is back online)' : '') + '\n' + how);
+      SmsTunnelKit.log(SMSTUNNEL_APP, { where: 'Row ' + plan.row, to: plan.to, result: result.queued ? 'Waiting for your phone' : 'Sent', details: how });
       outcome.sent++;
       continue;
     }
@@ -400,6 +402,21 @@ function smstunnelRunReminders_(settings, now, options) {
     SmsTunnelKit.log(SMSTUNNEL_APP, { result: 'Waiting', details: outcome.waiting + ' more reminders wait for the next run (at most ' + cap + ' per run).' });
   }
   return outcome;
+}
+
+/** A row still to remind: "Reminder sent" is empty, or says "Sending…" (a try that may not have gone through). */
+function smstunnelPending_(cell) {
+  var value = String(cell === undefined || cell === null ? '' : cell).trim();
+  return value === '' || value === SmsTunnelKit.SENDING;
+}
+
+/** "Sending…" with this try's key in the note, before the text goes out; a retry reuses the key. */
+function smstunnelStartSending_(layout, row) {
+  var cell = layout.sheet.getRange(row, layout.sent);
+  var key = cell.getValue() === SmsTunnelKit.SENDING ? SmsTunnelKit.keyInNote(cell.getNote()) : '';
+  if (!key) key = Utilities.getUuid();
+  smstunnelMarkRow_(layout, row, SmsTunnelKit.SENDING, 'SMSTunnel key: ' + key + '\nIf this stays here, the next run tries again with the same key.');
+  return key;
 }
 
 function smstunnelMarkRow_(layout, row, value, note) {

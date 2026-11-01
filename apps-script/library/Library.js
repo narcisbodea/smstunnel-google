@@ -11,7 +11,7 @@
  *
  * @param {string} to the number in international format, like +14155550123
  * @param {string} message the text, up to 1600 characters
- * @param {Object=} options deviceId, defaultCountryCode (like "+1"), serverUrl, apiKey
+ * @param {Object=} options deviceId, defaultCountryCode (like "+1"), idempotencyKey, serverUrl, apiKey
  * @return {{success: boolean, messageId: string, queued: boolean, branded: boolean, remaining: Object}}
  */
 function sendSms(to, message, options) {
@@ -23,7 +23,7 @@ function sendSms(to, message, options) {
  *
  * @param {string} to the number, like +14155550123
  * @param {string} message the text with the code, like "Your code is 482913"
- * @param {Object=} options deviceId, defaultCountryCode, serverUrl, apiKey
+ * @param {Object=} options deviceId, defaultCountryCode, idempotencyKey, serverUrl, apiKey
  * @return {{success: boolean, messageId: string, queued: boolean, branded: boolean, remaining: Object}}
  */
 function sendCode(to, message, options) {

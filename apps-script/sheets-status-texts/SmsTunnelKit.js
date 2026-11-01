@@ -259,30 +259,51 @@ const SmsTunnelKit = (function () {
     }
   }
 
+  var ROW_CODES = ['BAD_REQUEST', 'INVALID_NUMBER', 'MESSAGE_TOO_LONG', 'NO_CODE', 'IDEMPOTENCY_KEY_REUSED', 'IDEMPOTENCY_KEY_INVALID'];
+  /** Written in "Texted at" / "Reminder sent" while a text is on its way; its note holds the key. */
+  var SENDING = 'Sending…';
+
   /** 'row' for a problem with one text, 'transient' for one that may go away, 'account' for one that stops all texts. */
   function problemKind(err) {
     if (err && err.retryable === true) return 'transient';
-    var code = err && err.code;
-    if (code === 'BAD_REQUEST' || code === 'INVALID_NUMBER' || code === 'MESSAGE_TOO_LONG' || code === 'NO_CODE') return 'row';
-    return 'account';
+    return err && ROW_CODES.indexOf(err.code) >= 0 ? 'row' : 'account';
   }
 
   /**
    * Sends one text and says how it went, without throwing for SMSTunnel's answers. settings.apiKey (a key pasted
    * in the dialog but not saved yet) is used only for the test buttons.
+   *
+   * onceKey names this one text (a response and the number, an event's reminder, a row's attempt): it becomes the
+   * Idempotency-Key, with the number and the phone. Sent again within 24 hours with the same key (an answer got
+   * lost), SMSTunnel answers with the first result instead of sending a second text; a key already used for a
+   * different text means a text for this item went out before, so it counts as sent (already: true).
    */
-  function sendOne(number, text, settings) {
+  function sendOne(number, text, settings, onceKey) {
     var options = {};
     if (settings && settings.deviceId) options.deviceId = settings.deviceId;
     if (settings && settings.apiKey) options.apiKey = settings.apiKey;
+    if (onceKey) options.idempotencyKey = 'smstunnel-gas-' + digest([onceKey, number, options.deviceId || ''].join('|'));
     try {
       var result = SmsTunnel.sendSms(number, text, Object.keys(options).length ? options : undefined);
       if (!options.apiKey) clearProblem();
       return { ok: true, messageId: result.messageId, queued: result.queued };
     } catch (err) {
       if (!err || err.name !== 'SmsTunnelError') throw err;
+      if (err.code === 'IDEMPOTENCY_KEY_REUSED') return { ok: true, already: true, messageId: '', queued: false };
       return { ok: false, kind: problemKind(err), error: err, explain: explainError(err) };
     }
+  }
+
+  /** The key kept in a "Sending…" cell's note, so a retry sends with the same one. */
+  function keyInNote(note) {
+    var m = /SMSTunnel key: ([A-Za-z0-9-]{8,80})/.exec(String(note || ''));
+    return m ? m[1] : '';
+  }
+
+  /** A short, URL-safe SHA-256 of a text. */
+  function digest(text) {
+    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text), Utilities.Charset.UTF_8);
+    return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, '');
   }
 
   function pause() {
@@ -563,7 +584,7 @@ const SmsTunnelKit = (function () {
       return !(isDate(row[2]) && row[2].getTime() < before.getTime());
     });
     if (keep.length === rows.length) return 0;
-    range.clearContent();
+    // Write what stays first and clear the tail after: stopped in between, the sheet still holds every id.
     if (keep.length) {
       sheet.getRange(2, 1, keep.length, 3).setValues(
         keep.map(function (row) {
@@ -571,6 +592,7 @@ const SmsTunnelKit = (function () {
         })
       );
     }
+    sheet.getRange(2 + keep.length, 1, rows.length - keep.length, 3).clearContent();
     return rows.length - keep.length;
   }
 
@@ -622,14 +644,13 @@ const SmsTunnelKit = (function () {
 
   /** True when this id came by before (an edited form response); remembers the last 400 ids. */
   function seenBefore(id) {
-    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(id), Utilities.Charset.UTF_8);
-    var digest = Utilities.base64EncodeWebSafe(bytes).slice(0, 16);
+    var short = digest(id).slice(0, 16);
     var props = PropertiesService.getUserProperties();
     var list = String(props.getProperty(SEEN_PROPERTY) || '')
       .split(' ')
       .filter(Boolean);
-    if (list.indexOf(digest) >= 0) return true;
-    list.unshift(digest);
+    if (list.indexOf(short) >= 0) return true;
+    list.unshift(short);
     props.setProperty(SEEN_PROPERTY, list.slice(0, 400).join(' '));
     return false;
   }
@@ -756,6 +777,9 @@ const SmsTunnelKit = (function () {
     explainError: explainError,
     problemKind: problemKind,
     sendOne: sendOne,
+    digest: digest,
+    SENDING: SENDING,
+    keyInNote: keyInNote,
     pause: pause,
     noteProblem: noteProblem,
     clearProblem: clearProblem,

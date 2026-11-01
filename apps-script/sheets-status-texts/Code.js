@@ -141,6 +141,8 @@ function smstunnelSaveSetup(input) {
   var stamped = SmsTunnelKit.withLock(function () {
     return smstunnelStampExisting_(sheet, layout, settings);
   }, 30000);
+  // The rows that already have the value must be marked before any trigger exists, or the first check would text them.
+  if (typeof stamped !== 'number') return { ok: false, errors: { busy: 'SMSTunnel is texting rows of this spreadsheet right now. Click Save again in a minute.' } };
   SmsTunnelKit.saveSettings(settings);
   SmsTunnelKit.removeTriggers(SMSTUNNEL_APP.handlers);
   SmsTunnelKit.claimSetup();
@@ -149,7 +151,7 @@ function smstunnelSaveSetup(input) {
   SmsTunnelKit.clearProblem();
   SmsTunnelKit.logSheet();
 
-  var count = typeof stamped === 'number' ? stamped : 0;
+  var count = stamped;
   return {
     ok: true,
     message:
@@ -287,7 +289,7 @@ function smstunnelProcessRows_(sheet, layout, settings, first, last) {
     var row = display[i];
     var rowNumber = first + i;
     if (!smstunnelMatches_(row[layout.status - 1], settings)) continue;
-    if (String(row[layout.texted - 1]).trim() !== '') continue;
+    if (!smstunnelPending_(row[layout.texted - 1])) continue;
     if (summary.sent >= cap) {
       summary.waiting++;
       continue;
@@ -312,10 +314,12 @@ function smstunnelProcessRows_(sheet, layout, settings, first, last) {
       continue;
     }
     if (summary.sent > 0) SmsTunnelKit.pause();
-    var result = SmsTunnelKit.sendOne(phone.number, text, settings);
+    var once = smstunnelStartSending_(layout, rowNumber);
+    var result = SmsTunnelKit.sendOne(phone.number, text, settings, once);
     if (result.ok) {
-      smstunnelMark_(layout, rowNumber, new Date(), 'Texted ' + phone.number + (result.queued ? ' (your phone was offline: the text goes out when it is back online)' : '') + '\nMessage id: ' + result.messageId);
-      SmsTunnelKit.log(SMSTUNNEL_APP, { where: 'Row ' + rowNumber, to: phone.number, result: result.queued ? 'Waiting for your phone' : 'Sent', details: 'Message id ' + result.messageId });
+      var how = result.already ? 'SMSTunnel already had this text from an earlier try' : 'Message id: ' + result.messageId;
+      smstunnelMark_(layout, rowNumber, new Date(), 'Texted ' + phone.number + (result.queued ? ' (your phone was offline: the text goes out when it is back online)' : '') + '\n' + how);
+      SmsTunnelKit.log(SMSTUNNEL_APP, { where: 'Row ' + rowNumber, to: phone.number, result: result.queued ? 'Waiting for your phone' : 'Sent', details: how });
       summary.sent++;
       continue;
     }
@@ -335,6 +339,24 @@ function smstunnelProcessRows_(sheet, layout, settings, first, last) {
     SmsTunnelKit.log(SMSTUNNEL_APP, { where: 'Rows ' + first + '–' + last, result: 'Waiting', details: summary.waiting + ' more rows wait: at most ' + cap + ' texts go out at once.' });
   }
   return summary;
+}
+
+/** A row still to text: "Texted at" is empty, or says "Sending…" (a try that may not have gone through). */
+function smstunnelPending_(cell) {
+  var value = String(cell === undefined || cell === null ? '' : cell).trim();
+  return value === '' || value === SmsTunnelKit.SENDING;
+}
+
+/**
+ * Writes "Sending…" in the row with the key of this try in the note, before the text goes out. A later run that
+ * finds "Sending…" sends with the same key, so SMSTunnel never texts the row twice; a cleared cell gets a new key.
+ */
+function smstunnelStartSending_(layout, rowNumber) {
+  var cell = layout.sheet.getRange(rowNumber, layout.texted);
+  var key = cell.getValue() === SmsTunnelKit.SENDING ? SmsTunnelKit.keyInNote(cell.getNote()) : '';
+  if (!key) key = Utilities.getUuid();
+  smstunnelMark_(layout, rowNumber, SmsTunnelKit.SENDING, 'SMSTunnel key: ' + key + '\nIf this stays here, the next check tries again with the same key.');
+  return key;
 }
 
 function smstunnelMark_(layout, rowNumber, value, note) {
@@ -383,7 +405,7 @@ function smstunnelWaitingRows_(sheet, layout, settings) {
   var rows = sheet.getRange(2, 1, last - 1, layout.width).getDisplayValues();
   var out = [];
   rows.forEach(function (row, i) {
-    if (smstunnelMatches_(row[layout.status - 1], settings) && String(row[layout.texted - 1]).trim() === '') out.push(i + 2);
+    if (smstunnelMatches_(row[layout.status - 1], settings) && smstunnelPending_(row[layout.texted - 1])) out.push(i + 2);
   });
   return out;
 }

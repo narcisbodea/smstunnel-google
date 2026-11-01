@@ -19,7 +19,7 @@
  *               INVALID_ARGUMENT, INVALID_NUMBER, MESSAGE_TOO_LONG, NO_CODE, NO_API_KEY (refused here, nothing
  *               sent), NETWORK_ERROR, REDIRECT, INVALID_RESPONSE, BAD_REQUEST (400), UNAUTHORIZED (401),
  *               FORBIDDEN (403), NOT_FOUND (404), RATE_LIMITED (429), SERVER_ERROR (5xx), HTTP_ERROR (others)
- *   retryable   true for 429, 5xx and network errors: trying again a little later may work
+ *   retryable   true for 429, 5xx, network errors and IDEMPOTENCY_KEY_IN_PROGRESS: trying again a little later may work
  *   retryAfter  seconds to wait, when SMSTunnel says so (429)
  *   permission  with PERMISSION_REQUIRED: the permission the key lacks
  *
@@ -35,7 +35,7 @@ const SmsTunnel = (function () {
   /** SMSTunnel takes up to 1600 characters (10 joined SMS) for a text, 320 for a sign-in code. */
   var MAX_TEXT_LENGTH = 1600;
   var MAX_CODE_TEXT_LENGTH = 320;
-  var OPTION_NAMES = ['apiKey', 'deviceId', 'defaultCountryCode', 'serverUrl'];
+  var OPTION_NAMES = ['apiKey', 'deviceId', 'defaultCountryCode', 'serverUrl', 'idempotencyKey'];
   var STATUS_CODES = { 400: 'BAD_REQUEST', 401: 'UNAUTHORIZED', 403: 'FORBIDDEN', 404: 'NOT_FOUND', 429: 'RATE_LIMITED' };
   /** What SMSTunnel accepts as a number before it reads it: 7 to 25 digits, spaces, dots, dashes, brackets, +. */
   var NUMBER_SHAPE = /^[\d\s.\-()+]{7,25}$/;
@@ -51,7 +51,9 @@ const SmsTunnel = (function () {
    *     options.defaultCountryCode)
    * @param {string} message the text, up to 1600 characters
    * @param {Object=} options deviceId (send through this phone of yours), defaultCountryCode (like "+1": completes
-   *     numbers written without + or 00), serverUrl, apiKey
+   *     numbers written without + or 00), idempotencyKey (1 to 255 printable ASCII characters: sending again with
+   *     the same key and the same text within 24 hours returns the first answer instead of a second text), serverUrl,
+   *     apiKey
    * @return {{success: boolean, messageId: string, queued: boolean, branded: boolean, remaining: Object}}
    *     queued is true when your phone was offline: the text waits and goes out when the phone is back online.
    */
@@ -68,7 +70,7 @@ const SmsTunnel = (function () {
    *
    * @param {string} to the number, like +14155550123
    * @param {string} message the text with the code, like "Your code is 482913"
-   * @param {Object=} options deviceId, defaultCountryCode, serverUrl, apiKey
+   * @param {Object=} options deviceId, defaultCountryCode, idempotencyKey, serverUrl, apiKey
    * @return {{success: boolean, messageId: string, queued: boolean, branded: boolean, remaining: Object}}
    */
   function sendCode(to, message, options) {
@@ -363,6 +365,9 @@ const SmsTunnel = (function () {
       }
       out.defaultCountryCode = cc;
     }
+    if (out.idempotencyKey && !/^[!-~]{1,255}$/.test(out.idempotencyKey)) {
+      throw fail('idempotencyKey must be 1 to 255 printable ASCII characters, like a UUID.', 'INVALID_ARGUMENT');
+    }
     if (out.deviceId && !/^[A-Za-z0-9_-]{1,64}$/.test(out.deviceId)) {
       throw fail('deviceId "' + out.deviceId + '" is not a phone id. Copy it from Phones in your SMSTunnel dashboard.', 'INVALID_ARGUMENT');
     }
@@ -438,6 +443,7 @@ const SmsTunnel = (function () {
       params.contentType = 'application/json';
       params.payload = JSON.stringify(body);
     }
+    if (opts.idempotencyKey) params.headers['Idempotency-Key'] = opts.idempotencyKey;
 
     var response;
     try {
@@ -502,7 +508,8 @@ const SmsTunnel = (function () {
     var fields = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
     var own = typeof fields.code === 'string' && fields.code ? fields.code : '';
     var code = own || STATUS_CODES[status] || (status >= 500 ? 'SERVER_ERROR' : 'HTTP_ERROR');
-    var extra = { status: status, retryable: status === 429 || status >= 500, body: body };
+    // IDEMPOTENCY_KEY_IN_PROGRESS (409): the first request with this key is still running; ask again shortly.
+    var extra = { status: status, retryable: status === 429 || status >= 500 || own === 'IDEMPOTENCY_KEY_IN_PROGRESS', body: body };
     if (typeof fields.permission === 'string') extra.permission = fields.permission;
     var wait = retryAfterSeconds(headers && headers['retry-after']);
     if (wait !== null) extra.retryAfter = wait;

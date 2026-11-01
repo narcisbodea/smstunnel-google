@@ -103,6 +103,10 @@
             <span>the guest's email in the "<span id="bookName"></span>" sheet of this spreadsheet (columns Email, Phone, Name)</span>
           </label>
           <div class="error" data-error-for="clientSources"></div>
+          <label class="check">
+            <input type="checkbox" id="ownOnly" />
+            <span>Only events you created (recommended: an invitation from someone else could otherwise choose who gets a text from your phone)</span>
+          </label>
           <label>Only between</label>
           <div class="row">
             <select id="quietFrom" aria-label="From"></select>
@@ -291,6 +295,7 @@
               D.check('fromDescription', s.clients.fromDescription);
               D.set('clientLabels', s.clients.labels);
               D.check('fromGuests', s.clients.fromGuests);
+              D.check('ownOnly', s.clients.ownOnly);
               hours('quietFrom', 0, 23, s.clients.quietFrom);
               hours('quietTo', 1, 24, s.clients.quietTo);
               D.set('clientMessage', s.clients.message);
@@ -337,6 +342,7 @@
               labels: D.val('clientLabels'),
               fromDescription: D.checked('fromDescription'),
               fromGuests: D.checked('fromGuests'),
+              ownOnly: D.checked('ownOnly'),
               quietFrom: Number(D.val('quietFrom')),
               quietTo: Number(D.val('quietTo')),
               message: D.val('clientMessage'),

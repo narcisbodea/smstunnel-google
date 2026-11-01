@@ -491,7 +491,7 @@ class Form {
   constructor({ title = 'Test form', items = [] } = {}) {
     this.title = title;
     this.id = 'form-' + randomUUID().slice(0, 8);
-    this.items = items.map((item, i) => ({ id: item.id || 1000 + i, title: item.title, type: item.type || 'TEXT', index: i }));
+    this.items = items.map((item, i) => ({ id: item.id || 1000 + i, title: item.title, type: item.type || 'TEXT', index: i, choices: item.choices || [] }));
   }
   getId() {
     return this.id;
@@ -518,7 +518,16 @@ class Form {
 }
 
 function itemObject(item) {
-  return { getId: () => item.id, getTitle: () => item.title, getType: () => item.type, getIndex: () => item.index };
+  return {
+    getId: () => item.id,
+    getTitle: () => item.title,
+    getType: () => item.type,
+    getIndex: () => item.index,
+    asCheckboxItem: () => {
+      if (item.type !== 'CHECKBOX') throw new Error('Exception: Item is not a checkbox item.');
+      return { getChoices: () => item.choices.map((value) => ({ getValue: () => value })) };
+    },
+  };
 }
 
 // ─── Calendars ──────────────────────────────────────────────────────────────────────────────────────────
@@ -544,7 +553,11 @@ class CalendarEvent {
     return this.spec.title || '';
   }
   getDescription() {
+    if (this.spec.unreadable) throw new Error('Exception: You do not have permission to see this event.');
     return this.spec.description || '';
+  }
+  isOwnedByMe() {
+    return this.spec.ownedByMe !== false;
   }
   getLocation() {
     return this.spec.location || '';

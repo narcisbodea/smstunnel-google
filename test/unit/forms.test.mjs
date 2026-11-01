@@ -7,7 +7,7 @@ const ITEMS = [
   { id: 11, title: 'Your name', type: 'TEXT' },
   { id: 12, title: 'Phone number', type: 'TEXT' },
   { id: 13, title: 'What do you need?', type: 'PARAGRAPH_TEXT' },
-  { id: 14, title: 'Text me a confirmation', type: 'CHECKBOX' },
+  { id: 14, title: 'Text me a confirmation', type: 'CHECKBOX', choices: ['Yes, text me'] },
   { id: 15, title: 'About us', type: 'SECTION_HEADER' },
   { id: 16, title: 'Size', type: 'MULTIPLE_CHOICE' },
 ];
@@ -111,8 +111,8 @@ describe('each response', () => {
     const api = fakeApi();
     const { gas } = setup(api);
     submit(gas, { 'Your name': 'Bo', 'Phone number': '+14155550198' });
-    submit(gas, { 'Your name': 'Cy', 'Text me a confirmation': ['Yes'] });
-    submit(gas, { 'Your name': 'Di', 'Phone number': 'call me maybe', 'Text me a confirmation': ['Yes'] });
+    submit(gas, { 'Your name': 'Cy', 'Text me a confirmation': ['Yes, text me'] });
+    submit(gas, { 'Your name': 'Di', 'Phone number': 'call me maybe', 'Text me a confirmation': ['Yes, text me'] });
     assert.equal(api.sent.length, 6, 'only the texts to you');
     assert.ok(api.sent.every((s) => s.to === '+14155550100' || s.to === '+14155550101'));
     const reasons = JSON.parse(gas.userProps.getProperty('SMSTUNNEL_RECENT')).filter((r) => r.kind === 'confirmation').map((r) => r.details);
@@ -131,7 +131,7 @@ describe('each response', () => {
   test('an edited response: a new text to you marked "Edited", no second confirmation', () => {
     const api = fakeApi();
     const { gas } = setup(api);
-    const answers = { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes'] };
+    const answers = { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes, text me'] };
     submit(gas, answers, { id: 'resp-1' });
     submit(gas, { ...answers, 'What do you need?': 'Also a bell' }, { id: 'resp-1' });
     assert.equal(api.sent.length, 5);
@@ -151,7 +151,7 @@ describe('each response', () => {
     const api = fakeApi();
     const { gas } = setup(api, { confirmMessage: 'Thanks {Your name}!' });
     gas.form.items[0].title = 'Full name';
-    submit(gas, { 'Full name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes'] });
+    submit(gas, { 'Full name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes, text me'] });
     assert.equal(api.sent.length, 2);
     const last = JSON.parse(gas.userProps.getProperty('SMSTUNNEL_RECENT'))[0];
     assert.match(last.details, /uses \{Your name\}, which this form no longer has/);
@@ -192,17 +192,63 @@ describe('each response', () => {
     const api = fakeApi({ failWith: (request) => (refuse && request.url.endsWith('/sms/send') ? { status: 401, body: { message: 'Invalid or expired API key', statusCode: 401 } } : null) });
     const { gas } = setup(api);
     refuse = true;
-    assert.throws(() => submit(gas, { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes'] }), /did not accept the key/);
+    assert.throws(() => submit(gas, { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes, text me'] }), /did not accept the key/);
     assert.equal(gas.requests.filter((r) => r.url.endsWith('/sms/send')).length, 1, 'stops at the first refusal');
     gas.run('smstunnelHelp');
     assert.match(gas.ui.dialogs.at(-1).html, /Last problem/);
+  });
+
+  test('consent comes only from a checkbox, and only its first box means yes', () => {
+    const choice = setup(fakeApi(), { consentQuestionId: '16' });
+    assert.match(choice.result.errors.consentQuestionId, /checkbox question/);
+    const api = fakeApi();
+    const gas = createGas({
+      project: 'forms-text-me',
+      http: api,
+      form: { title: 'Booking', items: [{ id: 1, title: 'Phone' }, { id: 2, title: 'Texts', type: 'CHECKBOX', choices: ['Yes, text me', 'Call me instead'] }] },
+    });
+    const saved = gas.run('smstunnelSaveSetup', { apiKey: KEY, ownerNumbers: '+14155550100', ownerMessage: 'New: {Form}', confirm: true, phoneQuestionId: '1', consentQuestionId: '2', confirmMessage: 'Thanks', countryCode: '' });
+    assert.equal(saved.ok, true, JSON.stringify(saved.errors));
+    assert.match(saved.message, /when they tick "Yes, text me"/);
+    const trigger = gas.triggers[0];
+    gas.run('smstunnelOnFormSubmit', { response: gas.form.response({ answers: { Phone: '+14155550191', Texts: ['Call me instead'] } }), source: gas.form, triggerUid: trigger.id });
+    assert.deepEqual(api.sent.map((s) => s.to), ['+14155550100'], 'the other box is not consent');
+    gas.run('smstunnelOnFormSubmit', { response: gas.form.response({ answers: { Phone: '+14155550192', Texts: ['Call me instead', 'Yes, text me'] } }), source: gas.form, triggerUid: trigger.id });
+    assert.equal(api.sent.at(-1).to, '+14155550192');
+  });
+
+  test('{Time} uses the time zone chosen in Set up', () => {
+    const api = fakeApi();
+    const { gas } = setup(api, { ownerMessage: 'At {Time}', confirm: false, timeZone: 'America/New_York' });
+    submit(gas, { 'Your name': 'Ana' }, { timestamp: new Date('2026-11-02T14:30:00Z') });
+    assert.equal(api.sent[0].message, 'At 2026-11-02 09:30');
+    const bad = setup(fakeApi(), { timeZone: 'Mars/Olympus Mons!' });
+    assert.match(bad.result.errors.timeZone, /time zone like/);
+  });
+
+  test('each text carries an Idempotency-Key, and the retry after a busy server sends the same one', () => {
+    let calls = 0;
+    const api = fakeApi({
+      failWith: (request) => {
+        if (!request.url.endsWith('/sms/send')) return null;
+        calls++;
+        return calls === 1 ? { status: 503, body: { message: 'busy', statusCode: 503 } } : null;
+      },
+    });
+    const { gas } = setup(api, { ownerNumbers: '+14155550100\n+14155550101', confirm: false });
+    submit(gas, { 'Your name': 'Ana' });
+    const keys = gas.requests.filter((r) => r.url.endsWith('/sms/send')).map((r) => r.headers['Idempotency-Key']);
+    assert.equal(keys.length, 3);
+    assert.match(keys[0], /^smstunnel-gas-[A-Za-z0-9_-]{43}$/);
+    assert.equal(keys[0], keys[1], 'the retry reuses the key');
+    assert.notEqual(keys[1], keys[2], 'another number, another key');
   });
 
   test('long answers never make Recent texts too big for its property (9 kB)', () => {
     const api = fakeApi();
     const { gas } = setup(api);
     for (let i = 0; i < 25; i++) {
-      submit(gas, { 'Your name': 'Ana ' + i, 'Phone number': 'ç'.repeat(3000), 'Text me a confirmation': ['Yes'] });
+      submit(gas, { 'Your name': 'Ana ' + i, 'Phone number': 'ç'.repeat(3000), 'Text me a confirmation': ['Yes, text me'] });
     }
     const stored = gas.userProps.getProperty('SMSTUNNEL_RECENT');
     assert.ok(Buffer.byteLength(stored) <= 8000, Buffer.byteLength(stored) + ' bytes');
@@ -218,7 +264,7 @@ describe('each response', () => {
 
   test('what respondents type is escaped in Recent texts', () => {
     const { gas } = setup();
-    submit(gas, { 'Your name': 'Ana', 'Phone number': '<img src=x onerror=alert(1)>', 'Text me a confirmation': ['Yes'] });
+    submit(gas, { 'Your name': 'Ana', 'Phone number': '<img src=x onerror=alert(1)>', 'Text me a confirmation': ['Yes, text me'] });
     gas.run('smstunnelRecentTexts');
     const html = gas.ui.dialogs.at(-1).html;
     assert.equal(html.includes('<img src=x'), false);
@@ -228,7 +274,7 @@ describe('each response', () => {
   test('the key never shows in logs, recent texts or dialogs', () => {
     const api = fakeApi({ failWith: (request) => (request.url.endsWith('/sms/send') && JSON.parse(request.payload).to.endsWith('99') ? { throw: 'DNS error' } : null) });
     const { gas } = setup(api);
-    submit(gas, { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes'] });
+    submit(gas, { 'Your name': 'Ana', 'Phone number': '+14155550199', 'Text me a confirmation': ['Yes, text me'] });
     gas.run('smstunnelRecentTexts');
     gas.run('smstunnelHelp');
     const everything = gas.everything() + gas.userProps.getProperty('SMSTUNNEL_RECENT');

@@ -26,9 +26,9 @@ Small print under the buttons: *Free templates. Works with a free Google account
 
 Google Calendar stopped sending SMS notifications on 7 January 2019; since then its reminders come as app and email notifications only ([Google Workspace Updates](https://workspaceupdates.googleblog.com/2018/11/google-calendar-sms-notifications-to-be-removed.html)). SMSTunnel for Google Calendar brings text reminders back, sent by your own phone:
 
-- **Remind me**: a text before each event, 5 minutes to a day before. Only the calendars you choose, and only events with a word you choose if you like ("dentist").
+- **Remind me**: a text before each event, 10 minutes to a day before. Only the calendars you choose, and only events with a word you choose if you like ("dentist").
 - **My agenda**: one text every morning: *"Today, Mon, Nov 2: 9:00 AM Dentist, 2:00 PM Call with Ana."*
-- **Remind your clients**: for appointments, the person in the event gets a reminder from your number, the day before or a few hours before. Their number comes from a line like `SMS: +1 415 555 0123` in the event, or, for guests you invite, from the list of their numbers you keep in the template's "Phone numbers" sheet.
+- **Remind your clients**: for appointments, the person in the event gets a reminder from your number, the day before or a few hours before. Their number comes from a line like `SMS: +1 415 555 0123` in an event you created, or, for guests you invite, from the list of their numbers you keep in the template's "Phone numbers" sheet.
 
 Each reminder goes out once. If an event moves, the new time gets one new text.
 
@@ -71,7 +71,7 @@ The text waits and goes out as soon as your phone is back online.
 No, and on purpose. Each template texts only the numbers it was set up for: your own numbers, the row whose status changed, the appointment coming up, the person in an event. One text per number, with a limit per run. Send texts only to people who gave you their number for them.
 
 **Will it text a number twice?**
-No. Every template writes down what it sent ("Texted at", "Reminder sent", or a hidden list for the calendar) and checks it before each text.
+No. Every template writes down what it sent ("Texted at", "Reminder sent", or a hidden list for the calendar) and checks it before each text. Each text also carries a key, so even when an answer gets lost on the way back, the next try doesn't send it again.
 
 **Where is my key kept?**
 In the script's own private storage for your account, which only you can read. It never goes into a cell or a log. Delete the key under Apps in your dashboard and every text stops at once.
@@ -109,6 +109,8 @@ API facts:
   403 = the key lacks a permission (code PERMISSION_REQUIRED) or the plan doesn't allow it, 429 = too many
   requests (retryable, retryAfter in seconds), 5xx and network errors = retryable.
 - When my phone is offline the text waits (queued: true) and goes out as soon as the phone is back online.
+- Optional { idempotencyKey: "..." } (the Idempotency-Key header): a retry with the same key within 24 hours gets
+  the first answer instead of sending a second text. Use one key per text you mean to send.
 
 What I want: [describe what should send a text, to whom, and when]
 

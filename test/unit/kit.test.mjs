@@ -87,6 +87,8 @@ describe('errors in plain words', () => {
     assert.equal(K.problemKind(err('SERVER_ERROR', { retryable: true })), 'transient');
     assert.equal(K.problemKind(err('UNAUTHORIZED')), 'account');
     assert.equal(K.problemKind(err('NOT_FOUND')), 'account');
+    assert.equal(K.problemKind(err('IDEMPOTENCY_KEY_REUSED')), 'row', 'one text, not the whole run');
+    assert.equal(K.problemKind(err('IDEMPOTENCY_KEY_IN_PROGRESS', { retryable: true })), 'transient');
   });
   test('sendOne answers instead of throwing for SMSTunnel errors, and rethrows bugs', () => {
     const { gas, K: kit } = sheetGas(() => ({ status: 401, body: { message: 'Invalid or expired API key', statusCode: 401 } }));

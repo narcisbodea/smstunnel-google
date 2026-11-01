@@ -202,6 +202,23 @@ describe('errors', () => {
     });
   }
 
+  test('idempotencyKey becomes the Idempotency-Key header; a key in progress is retryable', () => {
+    const api = fakeApi();
+    const { gas, S } = lib(api);
+    S.sendSms('+14155550123', 'Hi', { idempotencyKey: 'order-17-shipped' });
+    assert.equal(gas.requests[0].headers['Idempotency-Key'], 'order-17-shipped');
+    S.sendSms('+14155550123', 'Hi');
+    assert.equal('Idempotency-Key' in gas.requests[1].headers, false);
+    assert.equal(caught(() => S.sendSms('+14155550123', 'Hi', { idempotencyKey: 'has spaces' })).code, 'INVALID_ARGUMENT');
+    const busy = lib(() => ({ status: 409, body: { statusCode: 409, error: 'Conflict', code: 'IDEMPOTENCY_KEY_IN_PROGRESS', message: 'still being processed' } })).S;
+    const inProgress = caught(() => busy.sendSms('+14155550123', 'Hi', { idempotencyKey: 'k1' }));
+    assert.equal(inProgress.code, 'IDEMPOTENCY_KEY_IN_PROGRESS');
+    assert.equal(inProgress.retryable, true);
+    const reused = caught(() => lib(() => ({ status: 422, body: { statusCode: 422, code: 'IDEMPOTENCY_KEY_REUSED', message: 'different request' } })).S.sendSms('+14155550123', 'Hi', { idempotencyKey: 'k1' }));
+    assert.equal(reused.code, 'IDEMPOTENCY_KEY_REUSED');
+    assert.equal(reused.retryable, false);
+  });
+
   test('a redirect is not followed (the key stays with SMSTunnel)', () => {
     const { S } = lib(() => ({ status: 302, headers: { Location: 'https://elsewhere.test/api/v1/sms/send' }, body: '' }));
     const err = caught(() => S.sendSms('+14155550123', 'Hi'));

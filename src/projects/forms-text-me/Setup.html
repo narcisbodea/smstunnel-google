@@ -50,9 +50,9 @@
           <label for="phoneQuestionId">The question where they type their phone number</label>
           <select id="phoneQuestionId"></select>
           <div class="error" data-error-for="phoneQuestionId"></div>
-          <label for="consentQuestionId">Only when they tick this question (optional)</label>
+          <label for="consentQuestionId">Only when they tick this box (optional)</label>
           <select id="consentQuestionId"></select>
-          <p class="hint">For example a checkbox "Text me a confirmation". Tell people in the form that you will text them.</p>
+          <p class="hint" id="consentHint">A checkbox question such as "Text me a confirmation": its first box counts as yes. Tell people in the form that you will text them.</p>
           <div class="error" data-error-for="consentQuestionId"></div>
           <label for="confirmMessage">The confirmation text</label>
           <textarea id="confirmMessage" rows="2"></textarea>
@@ -68,7 +68,9 @@
         <input type="text" id="countryCode" placeholder="+1" />
         <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
         <div class="error" data-error-for="countryCode"></div>
-        <p class="hint" id="timeZone"></p>
+        <label for="timeZone">Time zone for {Time}</label>
+        <input type="text" id="timeZone" placeholder="Europe/Bucharest" />
+        <div class="error" data-error-for="timeZone"></div>
       </details>
     </main>
     <footer>
@@ -114,14 +116,18 @@
             .map(function (q) {
               return { value: q.id, label: q.title };
             });
-          var all = data.questions.map(function (q) {
-            return { value: q.id, label: q.title };
-          });
+          var boxes = data.questions
+            .filter(function (q) {
+              return q.type === 'CHECKBOX' && q.choices && q.choices.length;
+            })
+            .map(function (q) {
+              return { value: q.id, label: q.title + ' (yes = "' + q.choices[0] + '")' };
+            });
           var phoneGuess = text.filter(function (q) {
             return /phone|mobile|cell|tel|number|sms/i.test(q.label);
           })[0];
           D.fillSelect(D.byId('phoneQuestionId'), text, data.settings.phoneQuestionId || (phoneGuess ? phoneGuess.value : ''), 'Choose a short-answer question');
-          D.fillSelect(D.byId('consentQuestionId'), all, data.settings.consentQuestionId, 'No extra question');
+          D.fillSelect(D.byId('consentQuestionId'), boxes, data.settings.consentQuestionId, boxes.length ? 'No consent box' : 'No checkbox question in the form');
           var names = data.special.concat(
             data.questions.map(function (q) {
               return q.title;
@@ -145,7 +151,13 @@
               D.check('confirm', s.confirm);
               D.set('confirmMessage', s.confirmMessage);
               D.set('countryCode', s.countryCode);
-              D.byId('timeZone').textContent = 'Times in texts use the time zone ' + res.timeZone + ' (Apps Script → Project Settings to change it).';
+              var browserZone = '';
+              try {
+                browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+              } catch (e) {
+                browserZone = '';
+              }
+              D.set('timeZone', s.timeZone || browserZone);
               fillQuestions();
               D.keyField(res.key, s.deviceId);
               refresh();
@@ -164,6 +176,7 @@
             confirm: D.checked('confirm'),
             phoneQuestionId: D.val('phoneQuestionId'),
             consentQuestionId: D.val('consentQuestionId'),
+            timeZone: D.val('timeZone').trim(),
             confirmMessage: D.val('confirmMessage'),
             countryCode: D.val('countryCode'),
           };

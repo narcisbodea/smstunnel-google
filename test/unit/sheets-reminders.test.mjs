@@ -116,14 +116,34 @@ describe('the reminder run', () => {
     assert.deepEqual(api.sent.slice(0, 3).map((s) => s.to), ['+40722101000', '+40722101001', '+40722101002']);
   });
 
-  test('a server error stops the run and leaves the rest waiting', () => {
-    const api = fakeApi({ failWith: (request) => (request.url.endsWith('/sms/send') && JSON.parse(request.payload).to.endsWith('09') ? { status: 500, body: { message: 'boom', statusCode: 500 } } : null) });
-    const { run, sheet } = setup({ http: api, sheetRows });
+  test('a server error stops the run; the row keeps "Sending…" and its key, and the next run uses the same key', () => {
+    let failing = true;
+    const api = fakeApi({ failWith: (request) => (failing && request.url.endsWith('/sms/send') && JSON.parse(request.payload).to.endsWith('09') ? { status: 500, body: { message: 'boom', statusCode: 500 } } : null) });
+    const { run, sheet, gas } = setup({ http: api, sheetRows });
     const outcome = run();
     assert.match(outcome.stopped, /could not be reached/);
     assert.equal(outcome.sent, 1);
-    assert.equal(sentCell(sheet, 10), '');
+    assert.equal(sentCell(sheet, 10), 'Sending…', 'the try that failed keeps its key for the next run');
+    assert.match(sheet.getRange(10, 5).getNote(), /SMSTunnel key: /);
     assert.equal(sentCell(sheet, 8), '', 'rows after the stop wait');
+    const keyFor = (to) => gas.requests.filter((r) => r.url.endsWith('/sms/send') && JSON.parse(r.payload).to === to).map((r) => r.headers['Idempotency-Key']);
+    failing = false;
+    const retry = run(at(2026, 11, 2, 10, 5));
+    assert.equal(retry.sent, 3);
+    assert.equal(Object.prototype.toString.call(sentCell(sheet, 10)), '[object Date]');
+    const keys = keyFor('+40722000009');
+    assert.equal(keys.length, 2);
+    assert.equal(keys[0], keys[1], 'the retry sends with the same key');
+  });
+
+  test('clearing "Reminder sent" sends again, with a new key', () => {
+    const { run, sheet, gas } = setup({ sheetRows: [HEADERS, ['Ana', '+40722000001', date(2026, 11, 2), time(14, 30)]] });
+    run();
+    sheet.getRange(2, 5).setValue('');
+    run(at(2026, 11, 2, 10, 30));
+    const keys = gas.requests.filter((r) => r.url.endsWith('/sms/send')).map((r) => r.headers['Idempotency-Key']);
+    assert.equal(keys.length, 2);
+    assert.notEqual(keys[0], keys[1]);
   });
 
   test('the time trigger runs it, and a dead key makes the run fail', () => {
