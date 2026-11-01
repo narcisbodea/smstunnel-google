@@ -372,7 +372,7 @@ function smstunnelReadInput_(data, full) {
       on: clients.on === true,
       calendars: clients.on === true ? calendarsOf(clients.calendars, 'clientCalendars') : (clients.calendars || []).map(String),
       hours: Number(clients.hours),
-      labels: String(clients.labels || '').trim(),
+      labels: String(clients.labels || '').trim().slice(0, 200),
       fromDescription: clients.fromDescription === true,
       fromGuests: clients.fromGuests === true,
       quietFrom: Math.floor(Number(clients.quietFrom)),

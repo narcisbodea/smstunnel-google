@@ -52,7 +52,11 @@ const SmsTunnelKit = (function () {
   }
 
   function saveSettings(settings) {
-    PropertiesService.getUserProperties().setProperty(SETTINGS_PROPERTY, JSON.stringify(settings));
+    var json = JSON.stringify(settings);
+    if (utf8Length(json) > 8800) {
+      throw new Error('These settings are too long to keep (Google keeps 9 kB): shorten the texts or choose fewer calendars.');
+    }
+    PropertiesService.getUserProperties().setProperty(SETTINGS_PROPERTY, json);
   }
 
   /** Makes your setup the one that sends texts here. A setup made earlier by someone else stops. */

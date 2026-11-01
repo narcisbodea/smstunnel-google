@@ -133,6 +133,13 @@ describe('one setup per spreadsheet', () => {
     assert.equal(K.beginRun({ triggerUid: 'whatever' }, app).enabled, true);
   });
 
+  test('settings too big for one property are refused with words, not an opaque error', () => {
+    const { K } = sheetGas();
+    assert.throws(() => K.saveSettings({ text: 'é'.repeat(5000) }), /too long to keep/);
+    K.saveSettings({ text: 'ok' });
+    assert.equal(K.loadSettings().text, 'ok');
+  });
+
   test('turning off removes the triggers and keeps the key', () => {
     const { gas, K, app } = sheetGas();
     gas.useKey(KEY);
