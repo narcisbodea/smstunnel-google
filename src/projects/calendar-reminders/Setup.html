@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_blank" />
+    <meta charset="utf-8" />
+    <style>
+      /* @include dialog.css */
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="lead">
+        Text reminders for your Google Calendar, from your own phone and your own number.
+        <span id="state" class="status">Off</span> <span id="interval" class="hint"></span>
+      </p>
+      <div id="message" class="notice"></div>
+
+      <section class="card">
+        <h2>Your SMSTunnel key</h2>
+        <label for="apiKey">API key</label>
+        <div class="row">
+          <input class="grow" type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk_live_…" />
+          <button type="button" id="checkKey">Check</button>
+        </div>
+        <p class="hint" id="keyState"></p>
+        <div class="error" data-error-for="apiKey"></div>
+        <label for="deviceId">Phone that sends the texts</label>
+        <select id="deviceId"></select>
+        <div class="error" data-error-for="deviceId"></div>
+        <p class="hint">
+          Your Android phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app">SMSTunnel app</a>.
+          Make a key in your <a href="https://dashboard.smstunnel.io/apps">SMSTunnel dashboard</a>: Apps → Add an app.
+          <button type="button" id="forgetKey" class="chip" hidden>Forget my key</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Texts for you</h2>
+        <label for="ownerNumbers">Your numbers</label>
+        <textarea id="ownerNumbers" rows="2" placeholder="+14155550123"></textarea>
+        <p class="hint">One per line, up to 5. Each gets its own text.</p>
+        <div class="error" data-error-for="ownerNumbers"></div>
+
+        <div id="mineShared">
+          <label>From these calendars</label>
+          <div class="calendars" id="meCalendars"></div>
+          <div class="error" data-error-for="meCalendars"></div>
+          <label for="meKeyword">Only events whose title has <span class="hint">(optional, separate words with commas)</span></label>
+          <input type="text" id="meKeyword" placeholder="for example: dentist, call" />
+          <label class="check">
+            <input type="checkbox" id="meAllDay" />
+            <span>Include all-day events: they count as starting at <select id="meAllDayHour" aria-label="All-day events start at"></select></span>
+          </label>
+        </div>
+
+        <div class="sub">
+          <label class="switch"><input type="checkbox" id="meOn" /> Remind me before each event</label>
+          <div id="meBody">
+            <label for="meLead">When</label>
+            <select id="meLead"></select>
+            <div class="error" data-error-for="meLead"></div>
+            <label for="meMessage">The text</label>
+            <textarea id="meMessage" rows="2"></textarea>
+            <div class="chips" id="meChips"></div>
+            <div class="error" data-error-for="meMessage"></div>
+            <div class="preview" id="mePreview"></div>
+          </div>
+        </div>
+
+        <div class="sub">
+          <label class="switch"><input type="checkbox" id="agendaOn" /> Text me my agenda every day</label>
+          <div id="agendaBody">
+            <div class="row">
+              <span>At</span>
+              <select id="agendaHour" aria-label="Hour"></select>
+              <select id="agendaMinute" aria-label="Minute"></select>
+            </div>
+            <div class="error" data-error-for="agendaHour"></div>
+            <label class="check"><input type="checkbox" id="agendaSkipEmpty" /> <span>Skip days with nothing planned</span></label>
+            <div class="preview" id="agendaPreview"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <label class="switch"><input type="checkbox" id="clientsOn" /> Remind the people in your events</label>
+        <p class="hint">For appointments: the person gets a reminder from your number before theirs.</p>
+        <div id="clientsBody">
+          <label>Calendars with these appointments</label>
+          <div class="calendars" id="clientCalendars"></div>
+          <div class="error" data-error-for="clientCalendars"></div>
+          <label for="clientHours">When</label>
+          <select id="clientHours"></select>
+          <div class="error" data-error-for="clientHours"></div>
+          <label>Their number comes from</label>
+          <label class="check">
+            <input type="checkbox" id="fromDescription" />
+            <span>a line in the event's description that starts with one of <input type="text" id="clientLabels" class="inline-input" aria-label="Words" /> and a colon, like <i>SMS: +1 415 555 0123</i></span>
+          </label>
+          <div class="error" data-error-for="clientLabels"></div>
+          <label class="check">
+            <input type="checkbox" id="fromGuests" />
+            <span>the guest's email in the "<span id="bookName"></span>" sheet of this spreadsheet (columns Email, Phone, Name)</span>
+          </label>
+          <div class="error" data-error-for="clientSources"></div>
+          <label>Only between</label>
+          <div class="row">
+            <select id="quietFrom" aria-label="From"></select>
+            <span>and</span>
+            <select id="quietTo" aria-label="Until"></select>
+          </div>
+          <div class="error" data-error-for="clientQuiet"></div>
+          <label for="clientMessage">The text</label>
+          <textarea id="clientMessage" rows="3"></textarea>
+          <div class="chips" id="clientChips"></div>
+          <div class="error" data-error-for="clientMessage"></div>
+          <div class="preview" id="clientPreview"></div>
+          <p class="hint">Only text people who asked for these reminders. Other numbers in a description, like a dial-in line, are never used.</p>
+        </div>
+      </section>
+
+      <details>
+        <summary>More settings</summary>
+        <label for="countryCode">Country code for numbers written without one</label>
+        <input type="text" id="countryCode" placeholder="+1" />
+        <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
+        <div class="error" data-error-for="countryCode"></div>
+        <label for="dateStyle">Dates and times in texts</label>
+        <select id="dateStyle"></select>
+        <label for="cap">At most this many texts per check</label>
+        <input type="number" id="cap" min="1" max="100" />
+        <div class="error" data-error-for="cap"></div>
+      </details>
+      <div class="error" data-error-for="parts"></div>
+    </main>
+    <footer>
+      <button type="button" id="test">Send me a test reminder</button>
+      <span class="space"></span>
+      <button type="button" id="close">Close</button>
+      <button type="button" id="save" class="primary">Save and turn on</button>
+    </footer>
+    <script>
+      /* @include dialog.js */
+    </script>
+    <script>
+      (function () {
+        var D = Dialog;
+        var data = null;
+
+        function pad(n) {
+          return (n < 10 ? '0' : '') + n;
+        }
+
+        function leadLabel(minutes) {
+          if (minutes < 60) return minutes + ' minutes before';
+          if (minutes < 1440) return minutes / 60 + (minutes === 60 ? ' hour before' : ' hours before');
+          return minutes / 1440 + (minutes === 1440 ? ' day before' : ' days before');
+        }
+
+        function hours(id, from, to, selected) {
+          var items = [];
+          for (var h = from; h <= to; h++) items.push({ value: String(h), label: pad(h) + ':00' });
+          D.fillSelect(D.byId(id), items, String(selected));
+        }
+
+        function calendarList(id, selected) {
+          var box = D.byId(id);
+          while (box.firstChild) box.removeChild(box.firstChild);
+          data.calendars.forEach(function (cal) {
+            var label = document.createElement('label');
+            label.className = 'check';
+            var input = document.createElement('input');
+            input.type = 'checkbox';
+            input.value = cal.id;
+            input.checked = selected.indexOf(cal.id) >= 0;
+            input.addEventListener('change', refresh);
+            var text = document.createElement('span');
+            text.textContent = cal.name + (cal.primary ? ' (your main calendar)' : '');
+            label.appendChild(input);
+            label.appendChild(text);
+            box.appendChild(label);
+          });
+        }
+
+        function picked(id) {
+          return Array.prototype.filter
+            .call(D.byId(id).querySelectorAll('input[type="checkbox"]'), function (input) {
+              return input.checked;
+            })
+            .map(function (input) {
+              return input.value;
+            });
+        }
+
+        function sample(lead) {
+          var style = D.val('dateStyle') || 'us';
+          var label = '';
+          data.dateStyles.forEach(function (s) {
+            if (s.value === style) label = s.label;
+          });
+          var parts = label.split(' · ');
+          var cal = data.calendars.filter(function (c) {
+            return picked('meCalendars').indexOf(c.id) >= 0;
+          })[0];
+          return {
+            title: 'Dentist',
+            date: parts[0] || '',
+            time: parts[1] || '',
+            location: 'Main Street 5',
+            calendar: cal ? cal.name : 'Calendar',
+            in: lead < 60 ? 'in ' + lead + ' min' : lead < 1440 ? 'in ' + lead / 60 + ' h' : 'in ' + lead / 1440 + (lead === 1440 ? ' day' : ' days'),
+            name: 'Ana',
+            _time: parts[1] || '9:30 AM',
+            _date: parts[0] || 'Mon, Nov 2',
+          };
+        }
+
+        function interval() {
+          if (D.checked('meOn')) {
+            var lead = Number(D.val('meLead'));
+            return lead <= 15 ? 5 : lead <= 60 ? 10 : 15;
+          }
+          if (D.checked('agendaOn')) return 15;
+          return D.checked('clientsOn') ? 60 : 0;
+        }
+
+        function refresh() {
+          var me = D.checked('meOn');
+          var agenda = D.checked('agendaOn');
+          var clients = D.checked('clientsOn');
+          D.show('meBody', me);
+          D.show('agendaBody', agenda);
+          D.show('clientsBody', clients);
+          D.show('mineShared', me || agenda);
+          var meValues = sample(Number(D.val('meLead')) || 15);
+          D.preview(D.byId('mePreview'), D.fill(D.val('meMessage'), meValues));
+          var clientValues = sample((Number(D.val('clientHours')) || 24) * 60);
+          D.preview(D.byId('clientPreview'), D.fill(D.val('clientMessage'), clientValues));
+          var other = meValues._time.indexOf('M') > 0 ? '2:00 PM' : '14:00';
+          var lines = ['Today, ' + meValues._date + ':'];
+          if (D.checked('meAllDay')) lines.push('All day: Ana\'s birthday');
+          lines.push(meValues._time + ' Dentist', other + ' Call with Ana');
+          D.preview(D.byId('agendaPreview'), lines.join('\n'));
+          var minutes = interval();
+          D.byId('interval').textContent = minutes ? 'Checks your calendar every ' + (minutes >= 60 ? 'hour' : minutes + ' minutes') + '.' : '';
+        }
+
+        function load() {
+          D.callServer('smstunnelGetSetupData')
+            .then(function (res) {
+              data = res;
+              var s = res.settings;
+              D.byId('state').textContent = res.on ? 'On' : 'Off';
+              D.byId('state').className = res.on ? 'status on' : 'status';
+              D.byId('bookName').textContent = res.phoneBookSheet;
+              if (res.setup === 'other') D.say('Another editor of this spreadsheet has set up these texts. If you save, your setup takes over and theirs stops.', '');
+              D.set('ownerNumbers', s.ownerNumbers);
+              calendarList('meCalendars', s.me.calendars);
+              calendarList('clientCalendars', s.clients.calendars);
+              D.set('meKeyword', s.me.keyword);
+              D.check('meAllDay', s.me.allDay);
+              hours('meAllDayHour', 0, 23, s.me.allDayHour);
+              D.check('meOn', s.me.on);
+              D.fillSelect(
+                D.byId('meLead'),
+                res.leads.map(function (m) {
+                  return { value: String(m), label: leadLabel(m) };
+                }),
+                String(s.me.lead)
+              );
+              D.set('meMessage', s.me.message);
+              D.check('agendaOn', s.agenda.on);
+              hours('agendaHour', 0, 23, s.agenda.hour);
+              D.fillSelect(
+                D.byId('agendaMinute'),
+                [0, 15, 30, 45].map(function (m) {
+                  return { value: String(m), label: ':' + pad(m) };
+                }),
+                String(s.agenda.minute)
+              );
+              D.check('agendaSkipEmpty', s.agenda.skipEmpty);
+              D.check('clientsOn', s.clients.on);
+              D.fillSelect(
+                D.byId('clientHours'),
+                res.clientHours.map(function (h) {
+                  return { value: String(h), label: leadLabel(h * 60) };
+                }),
+                String(s.clients.hours)
+              );
+              D.check('fromDescription', s.clients.fromDescription);
+              D.set('clientLabels', s.clients.labels);
+              D.check('fromGuests', s.clients.fromGuests);
+              hours('quietFrom', 0, 23, s.clients.quietFrom);
+              hours('quietTo', 1, 24, s.clients.quietTo);
+              D.set('clientMessage', s.clients.message);
+              D.set('countryCode', s.countryCode);
+              D.fillSelect(D.byId('dateStyle'), res.dateStyles, s.dateStyle);
+              D.set('cap', s.cap);
+              D.chips(D.byId('meChips'), res.placeholders.filter(function (p) { return p !== 'Name'; }), D.byId('meMessage'), refresh);
+              D.chips(D.byId('clientChips'), res.placeholders, D.byId('clientMessage'), refresh);
+              D.keyField(res.key, s.deviceId);
+              refresh();
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            });
+        }
+
+        function collect() {
+          return {
+            apiKey: D.val('apiKey').trim(),
+            deviceId: D.val('deviceId'),
+            ownerNumbers: D.val('ownerNumbers'),
+            countryCode: D.val('countryCode'),
+            dateStyle: D.val('dateStyle'),
+            cap: Number(D.val('cap')),
+            me: {
+              on: D.checked('meOn'),
+              calendars: picked('meCalendars'),
+              keyword: D.val('meKeyword'),
+              lead: Number(D.val('meLead')),
+              allDay: D.checked('meAllDay'),
+              allDayHour: Number(D.val('meAllDayHour')),
+              message: D.val('meMessage'),
+            },
+            agenda: {
+              on: D.checked('agendaOn'),
+              hour: Number(D.val('agendaHour')),
+              minute: Number(D.val('agendaMinute')),
+              skipEmpty: D.checked('agendaSkipEmpty'),
+            },
+            clients: {
+              on: D.checked('clientsOn'),
+              calendars: picked('clientCalendars'),
+              hours: Number(D.val('clientHours')),
+              labels: D.val('clientLabels'),
+              fromDescription: D.checked('fromDescription'),
+              fromGuests: D.checked('fromGuests'),
+              quietFrom: Number(D.val('quietFrom')),
+              quietTo: Number(D.val('quietTo')),
+              message: D.val('clientMessage'),
+            },
+          };
+        }
+
+        function submit(fn, working) {
+          D.busy(true);
+          D.say(working);
+          D.clearErrors();
+          return D.callServer(fn, collect())
+            .then(function (res) {
+              if (!res.ok) {
+                if (res.errors) {
+                  D.showErrors(res.errors);
+                  D.say('Please check the fields marked in red.', 'bad');
+                } else D.say(res.message, 'bad');
+                return res;
+              }
+              D.say(res.message, 'good');
+              return res;
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+              return { ok: false };
+            })
+            .then(function (res) {
+              D.busy(false);
+              return res;
+            });
+        }
+
+        D.byId('save').addEventListener('click', function () {
+          submit('smstunnelSaveSetup', 'Saving…').then(function (res) {
+            if (!res || !res.ok) return;
+            D.set('apiKey', '');
+            D.byId('state').textContent = 'On';
+            D.byId('state').className = 'status on';
+          });
+        });
+        D.byId('test').addEventListener('click', function () {
+          submit('smstunnelSendTestReminder', 'Sending a test reminder to your first number…');
+        });
+        D.byId('close').addEventListener('click', D.close);
+        ['meOn', 'agendaOn', 'clientsOn', 'meAllDay', 'meLead', 'clientHours', 'dateStyle'].forEach(function (id) {
+          D.byId(id).addEventListener('change', refresh);
+        });
+        ['meMessage', 'clientMessage'].forEach(function (id) {
+          D.byId(id).addEventListener('input', refresh);
+        });
+        load();
+      })();
+    </script>
+  </body>
+</html>

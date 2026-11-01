@@ -1,0 +1,9 @@
+{
+  "scriptId": "PASTE-THE-SCRIPT-ID-OF-CALENDAR-REMINDERS",
+  "rootDir": ".",
+  "filePushOrder": [
+    "SmsTunnel.js",
+    "SmsTunnelKit.js",
+    "Code.js"
+  ]
+}

@@ -1,0 +1,5 @@
+# clasp pushes only the project files
+**/**
+!appsscript.json
+!*.js
+!*.html

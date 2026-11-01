@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_blank" />
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --blue: #1a73e8;
+        --blue-dark: #1765cc;
+        --text: #202124;
+        --muted: #5f6368;
+        --line: #dadce0;
+        --soft: #f1f3f4;
+        --red: #c5221f;
+        --green: #137333;
+      }
+      * { box-sizing: border-box; }
+      html, body { background: #fff; }
+      body { margin: 0; font: 13px/1.45 Roboto, "Segoe UI", Arial, sans-serif; color: var(--text); }
+      main { padding: 2px 2px 76px; }
+      [hidden] { display: none !important; }
+      .lead { color: var(--muted); margin: 0 0 6px; }
+      .status { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 500; background: var(--soft); color: var(--muted); }
+      .status.on { background: #e6f4ea; color: var(--green); }
+      .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px 12px; margin: 10px 0; }
+      .card h2 { font-size: 14px; font-weight: 500; margin: 2px 0 4px; }
+      .card.off .body { display: none; }
+      label { display: block; font-weight: 500; margin: 10px 0 4px; }
+      label.inline, .check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 8px 0 2px; }
+      .check input { margin-top: 2px; }
+      .switch { display: flex; gap: 8px; align-items: center; font-weight: 500; margin: 2px 0; font-size: 14px; }
+      .hint { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+      .hint.bad, .error { color: var(--red); }
+      .hint.good { color: var(--green); }
+      .error { font-size: 12px; margin-top: 3px; min-height: 0; }
+      .error:empty { display: none; }
+      input[type="text"], input[type="password"], input[type="number"], select, textarea {
+        width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; font: inherit; color: inherit; background: #fff;
+      }
+      input:focus, select:focus, textarea:focus { outline: 2px solid #d2e3fc; border-color: var(--blue); }
+      textarea { min-height: 62px; resize: vertical; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .row > .grow { flex: 1; }
+      .row select, .row input { width: auto; }
+      .notice { padding: 8px 10px; border-radius: 6px; background: var(--soft); margin: 8px 0; }
+      .notice:empty { display: none; }
+      .notice.bad { background: #fce8e6; color: #a50e0e; }
+      .notice.good { background: #e6f4ea; color: var(--green); }
+      .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+      .chip { font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; }
+      .chip:hover { background: var(--soft); }
+      .preview { background: var(--soft); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; font-size: 12px; margin-top: 6px; }
+      .preview .count { display: block; color: var(--muted); margin-top: 4px; white-space: normal; }
+      .calendars { max-height: 112px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+      details { margin: 10px 0; }
+      summary { cursor: pointer; font-weight: 500; }
+      footer { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: #fff; }
+      footer .space { flex: 1; }
+      button { font: inherit; font-weight: 500; padding: 7px 14px; border-radius: 4px; border: 1px solid var(--line); background: #fff; color: var(--blue); cursor: pointer; }
+      button:hover { background: #f8fbff; }
+      button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+      button.primary:hover { background: var(--blue-dark); }
+      button:disabled { opacity: 0.55; cursor: default; }
+      a { color: var(--blue); }
+      .sub { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+      .inline-input { display: inline-block; width: 150px !important; padding: 3px 6px !important; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="lead">When a row's status becomes the value you choose, the number in that row gets your text, once, from your own phone. <span id="state" class="status">Off</span></p>
+      <div id="message" class="notice"></div>
+
+      <section class="card">
+        <h2>Your SMSTunnel key</h2>
+        <label for="apiKey">API key</label>
+        <div class="row">
+          <input class="grow" type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk_live_…" />
+          <button type="button" id="checkKey">Check</button>
+        </div>
+        <p class="hint" id="keyState"></p>
+        <div class="error" data-error-for="apiKey"></div>
+        <label for="deviceId">Phone that sends the texts</label>
+        <select id="deviceId"></select>
+        <div class="error" data-error-for="deviceId"></div>
+        <p class="hint">
+          Your Android phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app">SMSTunnel app</a>.
+          Make a key in your <a href="https://dashboard.smstunnel.io/apps">SMSTunnel dashboard</a>: Apps → Add an app.
+          <button type="button" id="forgetKey" class="chip" hidden>Forget my key</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>When to text</h2>
+        <label for="sheetId">Sheet</label>
+        <select id="sheetId"></select>
+        <p class="hint">Row 1 holds the column names.</p>
+        <div class="error" data-error-for="sheetId"></div>
+        <div class="row">
+          <div class="grow">
+            <label for="statusColumn">When the column</label>
+            <select id="statusColumn"></select>
+          </div>
+          <div class="grow">
+            <label for="statusValue">becomes</label>
+            <input type="text" id="statusValue" placeholder="Shipped" />
+          </div>
+        </div>
+        <div class="error" data-error-for="statusColumn"></div>
+        <div class="error" data-error-for="statusValue"></div>
+        <label for="phoneColumn">text the number in the column</label>
+        <select id="phoneColumn"></select>
+        <p class="hint">Write numbers with the country code, like +14155550123. Tip: Format → Number → Plain text keeps the + in the cell.</p>
+        <div class="error" data-error-for="phoneColumn"></div>
+      </section>
+
+      <section class="card">
+        <h2>The text</h2>
+        <textarea id="textBox" rows="3" aria-label="The text"></textarea>
+        <div class="chips" id="chips"></div>
+        <div class="error" data-error-for="message"></div>
+        <div class="preview" id="preview"></div>
+        <p class="hint">The preview uses the first row of the sheet. SMSTunnel writes the time of each text in the column "<span id="textedName"></span>", so a row is never texted twice.</p>
+      </section>
+
+      <details>
+        <summary>More settings</summary>
+        <label for="countryCode">Country code for numbers written without one</label>
+        <input type="text" id="countryCode" placeholder="+1" />
+        <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
+        <div class="error" data-error-for="countryCode"></div>
+        <label class="check"><input type="checkbox" id="sweep" /> <span>Also check every 15 minutes, for rows that other apps or scripts change (they don't count as edits)</span></label>
+        <label for="cap">At most this many texts per change or check</label>
+        <input type="number" id="cap" min="1" max="50" />
+        <div class="error" data-error-for="cap"></div>
+      </details>
+    </main>
+    <footer>
+      <span class="space"></span>
+      <button type="button" id="close">Close</button>
+      <button type="button" id="save" class="primary">Save and turn on</button>
+    </footer>
+    <script>
+      /* The parts every SMSTunnel setup dialog shares. This runs in your browser, inside the dialog. */
+      var Dialog = (function () {
+        'use strict';
+
+        var ANY_PHONE = 'Any of my phones (the one that is online)';
+        var PLACEHOLDER = /\{\{\s*([^{}\r\n]{1,80}?)\s*\}\}|\{\s*([^{}\r\n]{1,80}?)\s*\}/g;
+        var GSM = /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        /** Calls a function of the script and resolves with its answer. */
+        function callServer(name) {
+          var args = Array.prototype.slice.call(arguments, 1);
+          return new Promise(function (resolve, reject) {
+            var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+            runner[name].apply(runner, args);
+          });
+        }
+
+        function errorText(err) {
+          var text = err && err.message ? err.message : String(err);
+          return text.replace(/^(Exception|Error|ScriptError):\s*/, '');
+        }
+
+        function say(text, kind) {
+          var box = byId('message');
+          box.textContent = text || '';
+          box.className = 'notice' + (kind ? ' ' + kind : '');
+          if (text) box.scrollIntoView({ block: 'nearest' });
+        }
+
+        function clearErrors() {
+          Array.prototype.forEach.call(document.querySelectorAll('[data-error-for]'), function (el) {
+            el.textContent = '';
+          });
+        }
+
+        /** Shows each error under its field; true when there was one. */
+        function showErrors(errors) {
+          clearErrors();
+          var first = null;
+          Object.keys(errors || {}).forEach(function (name) {
+            var el = document.querySelector('[data-error-for="' + name + '"]');
+            if (!el) return;
+            el.textContent = errors[name];
+            if (!first) first = el;
+          });
+          if (first) first.scrollIntoView({ block: 'center' });
+          return first !== null;
+        }
+
+        function busy(on) {
+          Array.prototype.forEach.call(document.querySelectorAll('button'), function (button) {
+            button.disabled = on;
+          });
+        }
+
+        function option(value, label) {
+          var el = document.createElement('option');
+          el.value = value;
+          el.textContent = label;
+          return el;
+        }
+
+        /** Fills a select with {value, label} items; keeps `selected` even when the list doesn't have it yet. */
+        function fillSelect(select, items, selected, emptyLabel) {
+          while (select.firstChild) select.removeChild(select.firstChild);
+          if (emptyLabel !== undefined) select.appendChild(option('', emptyLabel));
+          var found = false;
+          items.forEach(function (item) {
+            select.appendChild(option(item.value, item.label));
+            if (String(item.value) === String(selected || '')) found = true;
+          });
+          if (selected && !found) select.appendChild(option(selected, 'The one saved before (' + selected + ')'));
+          select.value = selected || '';
+        }
+
+        function val(id) {
+          var el = byId(id);
+          return el ? el.value : '';
+        }
+
+        function checked(id) {
+          var el = byId(id);
+          return !!(el && el.checked);
+        }
+
+        function set(id, value) {
+          var el = byId(id);
+          if (el) el.value = value === undefined || value === null ? '' : value;
+        }
+
+        function check(id, on) {
+          var el = byId(id);
+          if (el) el.checked = !!on;
+        }
+
+        function show(id, on) {
+          var el = byId(id);
+          if (el) el.hidden = !on;
+        }
+
+        /** Buttons that put {Name} into a text box where the cursor is. */
+        function chips(container, names, textarea, onChange) {
+          while (container.firstChild) container.removeChild(container.firstChild);
+          names.forEach(function (name) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'chip';
+            button.textContent = '{' + name + '}';
+            button.addEventListener('click', function () {
+              var start = textarea.selectionStart;
+              var end = textarea.selectionEnd;
+              var text = '{' + name + '}';
+              textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+              textarea.selectionStart = textarea.selectionEnd = start + text.length;
+              textarea.focus();
+              if (onChange) onChange();
+            });
+            container.appendChild(button);
+          });
+        }
+
+        function nameKey(name) {
+          return String(name).replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+
+        /** The same filling the script does, for the previews. */
+        function fill(template, values) {
+          return String(template || '').replace(PLACEHOLDER, function (match, a, b) {
+            var key = nameKey(a || b);
+            return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
+          });
+        }
+
+        /** "92 characters · 1 text message", the way phones split long texts. */
+        function sizeOf(text) {
+          var chars = Array.from(text).length;
+          if (!chars) return '';
+          var plain = GSM.test(text);
+          var parts = plain ? (chars <= 160 ? 1 : Math.ceil(chars / 153)) : chars <= 70 ? 1 : Math.ceil(chars / 67);
+          return chars + ' characters · ' + parts + (parts === 1 ? ' text message' : ' text messages (joined on the phone)');
+        }
+
+        function preview(el, text) {
+          while (el.firstChild) el.removeChild(el.firstChild);
+          el.appendChild(document.createTextNode(text || '(empty)'));
+          var count = document.createElement('span');
+          count.className = 'count';
+          count.textContent = sizeOf(text || '');
+          el.appendChild(count);
+        }
+
+        /** The key box, its Check button, "Forget my key" and the list of phones, the same in every dialog. */
+        function keyField(state, deviceId) {
+          var input = byId('apiKey');
+          var status = byId('keyState');
+          var select = byId('deviceId');
+          var forget = byId('forgetKey');
+          var saved = state || { saved: false, hint: '' };
+
+          function describe() {
+            status.className = 'hint';
+            status.textContent = saved.saved
+              ? 'A key is saved (' + saved.hint + '). Leave the box empty to keep it.'
+              : 'No key saved yet. Get one in your SMSTunnel dashboard: Apps → Add an app.';
+            if (forget) forget.hidden = !saved.saved;
+          }
+
+          function load(key) {
+            status.className = 'hint';
+            status.textContent = 'Checking the key…';
+            return callServer('smstunnelCheckKey', key)
+              .then(function (res) {
+                status.className = res.ok ? 'hint good' : 'hint bad';
+                status.textContent = res.ok ? (key ? 'The key works.' : 'The saved key (' + saved.hint + ') works.') : res.message;
+                if (res.ok && res.message) status.textContent += ' ' + res.message;
+                var phones = (res.phones || []).map(function (phone) {
+                  return { value: phone.id, label: phone.name + (phone.isOnline ? ' · online' : ' · offline') };
+                });
+                fillSelect(select, phones, select.value || deviceId, ANY_PHONE);
+              })
+              .catch(function (err) {
+                status.className = 'hint bad';
+                status.textContent = errorText(err);
+              });
+          }
+
+          fillSelect(select, [], deviceId, ANY_PHONE);
+          describe();
+          byId('checkKey').addEventListener('click', function () {
+            load(input.value.trim());
+          });
+          if (forget) {
+            forget.addEventListener('click', function () {
+              busy(true);
+              callServer('smstunnelForgetKey')
+                .then(function (next) {
+                  saved = next;
+                  input.value = '';
+                  describe();
+                  say('Your key is removed from this script. Texts stop until you paste a key again.', 'good');
+                })
+                .catch(function (err) {
+                  say(errorText(err), 'bad');
+                })
+                .then(function () {
+                  busy(false);
+                });
+            });
+          }
+          if (saved.saved) load('');
+        }
+
+        function close() {
+          google.script.host.close();
+        }
+
+        return {
+          byId: byId,
+          callServer: callServer,
+          errorText: errorText,
+          say: say,
+          clearErrors: clearErrors,
+          showErrors: showErrors,
+          busy: busy,
+          fillSelect: fillSelect,
+          val: val,
+          checked: checked,
+          set: set,
+          check: check,
+          show: show,
+          chips: chips,
+          nameKey: nameKey,
+          fill: fill,
+          sizeOf: sizeOf,
+          preview: preview,
+          keyField: keyField,
+          close: close,
+        };
+      })();
+    </script>
+    <script>
+      (function () {
+        var D = Dialog;
+        var data = null;
+
+        function currentSheet() {
+          var id = D.val('sheetId');
+          for (var i = 0; i < data.sheets.length; i++) if (data.sheets[i].id === id) return data.sheets[i];
+          return null;
+        }
+
+        function columns(sheet) {
+          return (sheet ? sheet.headers : [])
+            .filter(function (h) {
+              return h && D.nameKey(h) !== D.nameKey(data.textedColumn);
+            })
+            .map(function (h) {
+              return { value: h, label: h };
+            });
+        }
+
+        function guess(sheet, pattern) {
+          var hit = (sheet ? sheet.headers : []).filter(function (h) {
+            return pattern.test(h);
+          })[0];
+          return hit || '';
+        }
+
+        function fillColumns(keep) {
+          var sheet = currentSheet();
+          var list = columns(sheet);
+          D.fillSelect(D.byId('statusColumn'), list, keep ? data.settings.statusColumn : guess(sheet, /status|state|stage/i), 'Choose a column');
+          D.fillSelect(D.byId('phoneColumn'), list, keep ? data.settings.phoneColumn : guess(sheet, /phone|mobile|cell|tel|sms/i), 'Choose a column');
+          D.chips(
+            D.byId('chips'),
+            (sheet ? sheet.headers : []).filter(function (h) {
+              return h && D.nameKey(h) !== D.nameKey(data.textedColumn);
+            }),
+            D.byId('textBox'),
+            refresh
+          );
+          refresh();
+        }
+
+        function refresh() {
+          var sheet = currentSheet();
+          var values = {};
+          if (sheet) {
+            sheet.headers.forEach(function (h, i) {
+              if (h) values[D.nameKey(h)] = sheet.sample[i] === undefined ? '' : sheet.sample[i];
+            });
+          }
+          D.preview(D.byId('preview'), D.fill(D.val('textBox'), values));
+        }
+
+        function load() {
+          D.callServer('smstunnelGetSetupData')
+            .then(function (res) {
+              data = res;
+              var s = res.settings;
+              D.byId('state').textContent = res.on ? 'On' : 'Off';
+              D.byId('state').className = res.on ? 'status on' : 'status';
+              D.byId('textedName').textContent = res.textedColumn;
+              if (res.setup === 'other') D.say('Another editor of this spreadsheet has set up these texts. If you save, your setup takes over and theirs stops.', '');
+              D.fillSelect(
+                D.byId('sheetId'),
+                res.sheets.map(function (sh) {
+                  return { value: sh.id, label: sh.name };
+                }),
+                s.sheetId
+              );
+              D.set('statusValue', s.statusValue);
+              D.set('textBox', s.message);
+              D.set('countryCode', s.countryCode);
+              D.check('sweep', s.sweep);
+              D.set('cap', s.cap);
+              fillColumns(res.configured === true);
+              D.keyField(res.key, s.deviceId);
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            });
+        }
+
+        function collect() {
+          return {
+            apiKey: D.val('apiKey').trim(),
+            deviceId: D.val('deviceId'),
+            sheetId: D.val('sheetId'),
+            statusColumn: D.val('statusColumn'),
+            statusValue: D.val('statusValue'),
+            phoneColumn: D.val('phoneColumn'),
+            message: D.val('textBox'),
+            countryCode: D.val('countryCode'),
+            sweep: D.checked('sweep'),
+            cap: Number(D.val('cap')),
+          };
+        }
+
+        D.byId('save').addEventListener('click', function () {
+          D.busy(true);
+          D.say('Saving…');
+          D.clearErrors();
+          D.callServer('smstunnelSaveSetup', collect())
+            .then(function (res) {
+              if (!res.ok) {
+                D.showErrors(res.errors);
+                D.say('Please check the fields marked in red.', 'bad');
+                return;
+              }
+              D.set('apiKey', '');
+              D.byId('state').textContent = 'On';
+              D.byId('state').className = 'status on';
+              D.say(res.message, 'good');
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            })
+            .then(function () {
+              D.busy(false);
+            });
+        });
+        D.byId('close').addEventListener('click', D.close);
+        D.byId('sheetId').addEventListener('change', function () {
+          fillColumns(false);
+        });
+        D.byId('textBox').addEventListener('input', refresh);
+        load();
+      })();
+    </script>
+  </body>
+</html>

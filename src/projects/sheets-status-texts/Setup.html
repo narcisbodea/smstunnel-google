@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_blank" />
+    <meta charset="utf-8" />
+    <style>
+      /* @include dialog.css */
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="lead">When a row's status becomes the value you choose, the number in that row gets your text, once, from your own phone. <span id="state" class="status">Off</span></p>
+      <div id="message" class="notice"></div>
+
+      <section class="card">
+        <h2>Your SMSTunnel key</h2>
+        <label for="apiKey">API key</label>
+        <div class="row">
+          <input class="grow" type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk_live_…" />
+          <button type="button" id="checkKey">Check</button>
+        </div>
+        <p class="hint" id="keyState"></p>
+        <div class="error" data-error-for="apiKey"></div>
+        <label for="deviceId">Phone that sends the texts</label>
+        <select id="deviceId"></select>
+        <div class="error" data-error-for="deviceId"></div>
+        <p class="hint">
+          Your Android phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app">SMSTunnel app</a>.
+          Make a key in your <a href="https://dashboard.smstunnel.io/apps">SMSTunnel dashboard</a>: Apps → Add an app.
+          <button type="button" id="forgetKey" class="chip" hidden>Forget my key</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>When to text</h2>
+        <label for="sheetId">Sheet</label>
+        <select id="sheetId"></select>
+        <p class="hint">Row 1 holds the column names.</p>
+        <div class="error" data-error-for="sheetId"></div>
+        <div class="row">
+          <div class="grow">
+            <label for="statusColumn">When the column</label>
+            <select id="statusColumn"></select>
+          </div>
+          <div class="grow">
+            <label for="statusValue">becomes</label>
+            <input type="text" id="statusValue" placeholder="Shipped" />
+          </div>
+        </div>
+        <div class="error" data-error-for="statusColumn"></div>
+        <div class="error" data-error-for="statusValue"></div>
+        <label for="phoneColumn">text the number in the column</label>
+        <select id="phoneColumn"></select>
+        <p class="hint">Write numbers with the country code, like +14155550123. Tip: Format → Number → Plain text keeps the + in the cell.</p>
+        <div class="error" data-error-for="phoneColumn"></div>
+      </section>
+
+      <section class="card">
+        <h2>The text</h2>
+        <textarea id="textBox" rows="3" aria-label="The text"></textarea>
+        <div class="chips" id="chips"></div>
+        <div class="error" data-error-for="message"></div>
+        <div class="preview" id="preview"></div>
+        <p class="hint">The preview uses the first row of the sheet. SMSTunnel writes the time of each text in the column "<span id="textedName"></span>", so a row is never texted twice.</p>
+      </section>
+
+      <details>
+        <summary>More settings</summary>
+        <label for="countryCode">Country code for numbers written without one</label>
+        <input type="text" id="countryCode" placeholder="+1" />
+        <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
+        <div class="error" data-error-for="countryCode"></div>
+        <label class="check"><input type="checkbox" id="sweep" /> <span>Also check every 15 minutes, for rows that other apps or scripts change (they don't count as edits)</span></label>
+        <label for="cap">At most this many texts per change or check</label>
+        <input type="number" id="cap" min="1" max="50" />
+        <div class="error" data-error-for="cap"></div>
+      </details>
+    </main>
+    <footer>
+      <span class="space"></span>
+      <button type="button" id="close">Close</button>
+      <button type="button" id="save" class="primary">Save and turn on</button>
+    </footer>
+    <script>
+      /* @include dialog.js */
+    </script>
+    <script>
+      (function () {
+        var D = Dialog;
+        var data = null;
+
+        function currentSheet() {
+          var id = D.val('sheetId');
+          for (var i = 0; i < data.sheets.length; i++) if (data.sheets[i].id === id) return data.sheets[i];
+          return null;
+        }
+
+        function columns(sheet) {
+          return (sheet ? sheet.headers : [])
+            .filter(function (h) {
+              return h && D.nameKey(h) !== D.nameKey(data.textedColumn);
+            })
+            .map(function (h) {
+              return { value: h, label: h };
+            });
+        }
+
+        function guess(sheet, pattern) {
+          var hit = (sheet ? sheet.headers : []).filter(function (h) {
+            return pattern.test(h);
+          })[0];
+          return hit || '';
+        }
+
+        function fillColumns(keep) {
+          var sheet = currentSheet();
+          var list = columns(sheet);
+          D.fillSelect(D.byId('statusColumn'), list, keep ? data.settings.statusColumn : guess(sheet, /status|state|stage/i), 'Choose a column');
+          D.fillSelect(D.byId('phoneColumn'), list, keep ? data.settings.phoneColumn : guess(sheet, /phone|mobile|cell|tel|sms/i), 'Choose a column');
+          D.chips(
+            D.byId('chips'),
+            (sheet ? sheet.headers : []).filter(function (h) {
+              return h && D.nameKey(h) !== D.nameKey(data.textedColumn);
+            }),
+            D.byId('textBox'),
+            refresh
+          );
+          refresh();
+        }
+
+        function refresh() {
+          var sheet = currentSheet();
+          var values = {};
+          if (sheet) {
+            sheet.headers.forEach(function (h, i) {
+              if (h) values[D.nameKey(h)] = sheet.sample[i] === undefined ? '' : sheet.sample[i];
+            });
+          }
+          D.preview(D.byId('preview'), D.fill(D.val('textBox'), values));
+        }
+
+        function load() {
+          D.callServer('smstunnelGetSetupData')
+            .then(function (res) {
+              data = res;
+              var s = res.settings;
+              D.byId('state').textContent = res.on ? 'On' : 'Off';
+              D.byId('state').className = res.on ? 'status on' : 'status';
+              D.byId('textedName').textContent = res.textedColumn;
+              if (res.setup === 'other') D.say('Another editor of this spreadsheet has set up these texts. If you save, your setup takes over and theirs stops.', '');
+              D.fillSelect(
+                D.byId('sheetId'),
+                res.sheets.map(function (sh) {
+                  return { value: sh.id, label: sh.name };
+                }),
+                s.sheetId
+              );
+              D.set('statusValue', s.statusValue);
+              D.set('textBox', s.message);
+              D.set('countryCode', s.countryCode);
+              D.check('sweep', s.sweep);
+              D.set('cap', s.cap);
+              fillColumns(res.configured === true);
+              D.keyField(res.key, s.deviceId);
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            });
+        }
+
+        function collect() {
+          return {
+            apiKey: D.val('apiKey').trim(),
+            deviceId: D.val('deviceId'),
+            sheetId: D.val('sheetId'),
+            statusColumn: D.val('statusColumn'),
+            statusValue: D.val('statusValue'),
+            phoneColumn: D.val('phoneColumn'),
+            message: D.val('textBox'),
+            countryCode: D.val('countryCode'),
+            sweep: D.checked('sweep'),
+            cap: Number(D.val('cap')),
+          };
+        }
+
+        D.byId('save').addEventListener('click', function () {
+          D.busy(true);
+          D.say('Saving…');
+          D.clearErrors();
+          D.callServer('smstunnelSaveSetup', collect())
+            .then(function (res) {
+              if (!res.ok) {
+                D.showErrors(res.errors);
+                D.say('Please check the fields marked in red.', 'bad');
+                return;
+              }
+              D.set('apiKey', '');
+              D.byId('state').textContent = 'On';
+              D.byId('state').className = 'status on';
+              D.say(res.message, 'good');
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            })
+            .then(function () {
+              D.busy(false);
+            });
+        });
+        D.byId('close').addEventListener('click', D.close);
+        D.byId('sheetId').addEventListener('change', function () {
+          fillColumns(false);
+        });
+        D.byId('textBox').addEventListener('input', refresh);
+        load();
+      })();
+    </script>
+  </body>
+</html>

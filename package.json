@@ -1,0 +1,27 @@
+{
+  "name": "smstunnel-google",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SMSTunnel for Google Sheets, Forms and Calendar: an Apps Script library and ready templates that send texts from your own Android phone, from your own number.",
+  "author": "Narcis Bodea <contact@narboweb.ro>",
+  "license": "MIT",
+  "homepage": "https://smstunnel.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/narcisbodea/smstunnel-google.git"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "lint": "node tools/lint-gas.mjs",
+    "test": "node tools/build.mjs --check && node tools/lint-gas.mjs && node --test \"test/unit/*.test.mjs\"",
+    "test:e2e": "node --test --test-concurrency=1 \"test/e2e/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "acorn": "^8.15.0",
+    "acorn-walk": "^8.3.4"
+  }
+}

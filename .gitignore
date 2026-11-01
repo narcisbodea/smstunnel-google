@@ -1,0 +1,9 @@
+node_modules/
+.clasp.json
+.clasprc.json
+*.log
+.env
+.env.*
+local-test-key.json
+%TEMP%*
+test/.tmp/

@@ -1,0 +1,9 @@
+{
+  "scriptId": "PASTE-THE-SCRIPT-ID-OF-SHEETS-STATUS-TEXTS",
+  "rootDir": ".",
+  "filePushOrder": [
+    "SmsTunnel.js",
+    "SmsTunnelKit.js",
+    "Code.js"
+  ]
+}

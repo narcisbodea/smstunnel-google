@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_blank" />
+    <meta charset="utf-8" />
+    <style>
+      /* @include dialog.css */
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="lead">Each appointment in your sheet gets one reminder text, from your own phone, a few hours before. <span id="state" class="status">Off</span></p>
+      <div id="message" class="notice"></div>
+
+      <section class="card">
+        <h2>Your SMSTunnel key</h2>
+        <label for="apiKey">API key</label>
+        <div class="row">
+          <input class="grow" type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk_live_…" />
+          <button type="button" id="checkKey">Check</button>
+        </div>
+        <p class="hint" id="keyState"></p>
+        <div class="error" data-error-for="apiKey"></div>
+        <label for="deviceId">Phone that sends the texts</label>
+        <select id="deviceId"></select>
+        <div class="error" data-error-for="deviceId"></div>
+        <p class="hint">
+          Your Android phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app">SMSTunnel app</a>.
+          Make a key in your <a href="https://dashboard.smstunnel.io/apps">SMSTunnel dashboard</a>: Apps → Add an app.
+          <button type="button" id="forgetKey" class="chip" hidden>Forget my key</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Your appointments</h2>
+        <label for="sheetId">Sheet</label>
+        <select id="sheetId"></select>
+        <p class="hint">Row 1 holds the column names; each row below is one appointment.</p>
+        <div class="error" data-error-for="sheetId"></div>
+        <label for="phoneColumn">Phone number column</label>
+        <select id="phoneColumn"></select>
+        <p class="hint">Numbers with the country code, like +14155550123. Rows without a valid number are skipped.</p>
+        <div class="error" data-error-for="phoneColumn"></div>
+        <div class="row">
+          <div class="grow">
+            <label for="dateColumn">Date column</label>
+            <select id="dateColumn"></select>
+          </div>
+          <div class="grow">
+            <label for="timeColumn">Time column</label>
+            <select id="timeColumn"></select>
+          </div>
+        </div>
+        <div class="error" data-error-for="dateColumn"></div>
+        <div class="error" data-error-for="timeColumn"></div>
+        <p class="hint" id="timeZone"></p>
+      </section>
+
+      <section class="card">
+        <h2>When</h2>
+        <label for="hoursBefore">Send each reminder</label>
+        <select id="hoursBefore">
+          <option value="1">up to 1 hour before</option>
+          <option value="2">up to 2 hours before</option>
+          <option value="3">up to 3 hours before</option>
+          <option value="6">up to 6 hours before</option>
+          <option value="12">up to 12 hours before</option>
+          <option value="24">up to 24 hours before</option>
+          <option value="48">up to 2 days before</option>
+          <option value="72">up to 3 days before</option>
+        </select>
+        <div class="error" data-error-for="hoursBefore"></div>
+        <label for="frequency">Check the sheet</label>
+        <div class="row">
+          <select id="frequency" class="grow">
+            <option value="hourly">every hour</option>
+            <option value="daily">once a day</option>
+          </select>
+          <select id="dailyHour" aria-label="Hour of the daily check"></select>
+        </div>
+        <div class="error" data-error-for="dailyHour"></div>
+        <label for="quietFrom">Texts go out only between</label>
+        <div class="row">
+          <select id="quietFrom" aria-label="From"></select>
+          <span>and</span>
+          <select id="quietTo" aria-label="Until"></select>
+        </div>
+        <p class="hint">So nobody gets a text at night. With dates that have no time, choose 24 hours or more.</p>
+        <div class="error" data-error-for="quietFrom"></div>
+      </section>
+
+      <section class="card">
+        <h2>The reminder</h2>
+        <textarea id="textBox" rows="3" aria-label="The reminder text"></textarea>
+        <div class="chips" id="chips"></div>
+        <div class="error" data-error-for="message"></div>
+        <div class="preview" id="preview"></div>
+        <p class="hint">The preview uses the first row. Each reminder goes out once: SMSTunnel writes the time in "<span id="sentName"></span>".</p>
+      </section>
+
+      <details>
+        <summary>More settings</summary>
+        <label for="countryCode">Country code for numbers written without one</label>
+        <input type="text" id="countryCode" placeholder="+1" />
+        <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
+        <div class="error" data-error-for="countryCode"></div>
+        <label for="cap">At most this many reminders per run</label>
+        <input type="number" id="cap" min="1" max="100" />
+        <p class="hint">The soonest appointments go first; the rest go out on the next run.</p>
+        <div class="error" data-error-for="cap"></div>
+      </details>
+    </main>
+    <footer>
+      <span class="space"></span>
+      <button type="button" id="close">Close</button>
+      <button type="button" id="save" class="primary">Save and turn on</button>
+    </footer>
+    <script>
+      /* @include dialog.js */
+    </script>
+    <script>
+      (function () {
+        var D = Dialog;
+        var data = null;
+        var touched = false;
+
+        function hours(select, from, to, selected) {
+          var items = [];
+          for (var h = from; h <= to; h++) items.push({ value: String(h), label: (h < 10 ? '0' : '') + h + ':00' });
+          D.fillSelect(select, items, String(selected));
+        }
+
+        function currentSheet() {
+          var id = D.val('sheetId');
+          for (var i = 0; i < data.sheets.length; i++) if (data.sheets[i].id === id) return data.sheets[i];
+          return null;
+        }
+
+        function names(sheet) {
+          return (sheet ? sheet.headers : []).filter(function (h) {
+            return h && D.nameKey(h) !== D.nameKey(data.sentColumn);
+          });
+        }
+
+        function guess(sheet, pattern) {
+          return names(sheet).filter(function (h) {
+            return pattern.test(h);
+          })[0] || '';
+        }
+
+        function suggestText() {
+          if (touched) return;
+          var sheet = currentSheet();
+          var name = guess(sheet, /name|client|patient|customer/i);
+          var date = D.val('dateColumn');
+          var time = D.val('timeColumn');
+          var when = date ? ' on {' + date + '}' + (time ? ' at {' + time + '}' : '') : '';
+          D.set('textBox', 'Hi' + (name ? ' {' + name + '}' : '') + ', a reminder of your appointment' + when + '. Reply to this text if you need to change it.');
+        }
+
+        function fillColumns(keep) {
+          var sheet = currentSheet();
+          var list = names(sheet).map(function (h) {
+            return { value: h, label: h };
+          });
+          var s = data.settings;
+          D.fillSelect(D.byId('phoneColumn'), list, keep ? s.phoneColumn : guess(sheet, /phone|mobile|cell|tel|sms/i), 'Choose a column');
+          D.fillSelect(D.byId('dateColumn'), list, keep ? s.dateColumn : guess(sheet, /date|day|when/i), 'Choose a column');
+          D.fillSelect(D.byId('timeColumn'), list, keep ? s.timeColumn : guess(sheet, /time|hour/i), 'None: the date has the time');
+          D.chips(D.byId('chips'), names(sheet), D.byId('textBox'), function () {
+            touched = true;
+            refresh();
+          });
+          if (!keep) suggestText();
+          refresh();
+        }
+
+        function refresh() {
+          var sheet = currentSheet();
+          var values = {};
+          if (sheet) {
+            sheet.headers.forEach(function (h, i) {
+              if (h) values[D.nameKey(h)] = sheet.sample[i] === undefined ? '' : sheet.sample[i];
+            });
+          }
+          D.preview(D.byId('preview'), D.fill(D.val('textBox'), values));
+          D.show('dailyHour', D.val('frequency') === 'daily');
+        }
+
+        function load() {
+          D.callServer('smstunnelGetSetupData')
+            .then(function (res) {
+              data = res;
+              var s = res.settings;
+              touched = res.configured === true;
+              D.byId('state').textContent = res.on ? 'On' : 'Off';
+              D.byId('state').className = res.on ? 'status on' : 'status';
+              D.byId('sentName').textContent = res.sentColumn;
+              D.byId('timeZone').textContent = 'Times are read in the spreadsheet\'s time zone, ' + res.timeZone + ' (File → Settings to change it).';
+              if (res.setup === 'other') D.say('Another editor of this spreadsheet has set up these reminders. If you save, your setup takes over and theirs stops.', '');
+              D.fillSelect(
+                D.byId('sheetId'),
+                res.sheets.map(function (sh) {
+                  return { value: sh.id, label: sh.name };
+                }),
+                s.sheetId
+              );
+              D.set('hoursBefore', String(s.hoursBefore));
+              D.set('frequency', s.frequency);
+              hours(D.byId('dailyHour'), 0, 23, s.dailyHour);
+              hours(D.byId('quietFrom'), 0, 23, s.quietFrom);
+              hours(D.byId('quietTo'), 1, 24, s.quietTo);
+              D.set('textBox', s.message);
+              D.set('countryCode', s.countryCode);
+              D.set('cap', s.cap);
+              fillColumns(res.configured === true);
+              D.keyField(res.key, s.deviceId);
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            });
+        }
+
+        function collect() {
+          return {
+            apiKey: D.val('apiKey').trim(),
+            deviceId: D.val('deviceId'),
+            sheetId: D.val('sheetId'),
+            phoneColumn: D.val('phoneColumn'),
+            dateColumn: D.val('dateColumn'),
+            timeColumn: D.val('timeColumn'),
+            message: D.val('textBox'),
+            hoursBefore: Number(D.val('hoursBefore')),
+            frequency: D.val('frequency'),
+            dailyHour: Number(D.val('dailyHour')),
+            quietFrom: Number(D.val('quietFrom')),
+            quietTo: Number(D.val('quietTo')),
+            countryCode: D.val('countryCode'),
+            cap: Number(D.val('cap')),
+          };
+        }
+
+        D.byId('save').addEventListener('click', function () {
+          D.busy(true);
+          D.say('Saving…');
+          D.clearErrors();
+          D.callServer('smstunnelSaveSetup', collect())
+            .then(function (res) {
+              if (!res.ok) {
+                D.showErrors(res.errors);
+                D.say('Please check the fields marked in red.', 'bad');
+                return;
+              }
+              D.set('apiKey', '');
+              D.byId('state').textContent = 'On';
+              D.byId('state').className = 'status on';
+              D.say(res.message, 'good');
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            })
+            .then(function () {
+              D.busy(false);
+            });
+        });
+        D.byId('close').addEventListener('click', D.close);
+        D.byId('sheetId').addEventListener('change', function () {
+          fillColumns(false);
+        });
+        ['dateColumn', 'timeColumn'].forEach(function (id) {
+          D.byId(id).addEventListener('change', function () {
+            suggestText();
+            refresh();
+          });
+        });
+        D.byId('frequency').addEventListener('change', refresh);
+        D.byId('textBox').addEventListener('input', function () {
+          touched = true;
+          refresh();
+        });
+        load();
+      })();
+    </script>
+  </body>
+</html>

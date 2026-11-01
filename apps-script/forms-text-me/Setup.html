@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_blank" />
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --blue: #1a73e8;
+        --blue-dark: #1765cc;
+        --text: #202124;
+        --muted: #5f6368;
+        --line: #dadce0;
+        --soft: #f1f3f4;
+        --red: #c5221f;
+        --green: #137333;
+      }
+      * { box-sizing: border-box; }
+      html, body { background: #fff; }
+      body { margin: 0; font: 13px/1.45 Roboto, "Segoe UI", Arial, sans-serif; color: var(--text); }
+      main { padding: 2px 2px 76px; }
+      [hidden] { display: none !important; }
+      .lead { color: var(--muted); margin: 0 0 6px; }
+      .status { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 500; background: var(--soft); color: var(--muted); }
+      .status.on { background: #e6f4ea; color: var(--green); }
+      .card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px 12px; margin: 10px 0; }
+      .card h2 { font-size: 14px; font-weight: 500; margin: 2px 0 4px; }
+      .card.off .body { display: none; }
+      label { display: block; font-weight: 500; margin: 10px 0 4px; }
+      label.inline, .check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; margin: 8px 0 2px; }
+      .check input { margin-top: 2px; }
+      .switch { display: flex; gap: 8px; align-items: center; font-weight: 500; margin: 2px 0; font-size: 14px; }
+      .hint { color: var(--muted); font-size: 12px; margin: 3px 0 0; }
+      .hint.bad, .error { color: var(--red); }
+      .hint.good { color: var(--green); }
+      .error { font-size: 12px; margin-top: 3px; min-height: 0; }
+      .error:empty { display: none; }
+      input[type="text"], input[type="password"], input[type="number"], select, textarea {
+        width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; font: inherit; color: inherit; background: #fff;
+      }
+      input:focus, select:focus, textarea:focus { outline: 2px solid #d2e3fc; border-color: var(--blue); }
+      textarea { min-height: 62px; resize: vertical; }
+      .row { display: flex; gap: 8px; align-items: center; }
+      .row > .grow { flex: 1; }
+      .row select, .row input { width: auto; }
+      .notice { padding: 8px 10px; border-radius: 6px; background: var(--soft); margin: 8px 0; }
+      .notice:empty { display: none; }
+      .notice.bad { background: #fce8e6; color: #a50e0e; }
+      .notice.good { background: #e6f4ea; color: var(--green); }
+      .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+      .chip { font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; }
+      .chip:hover { background: var(--soft); }
+      .preview { background: var(--soft); border-radius: 8px; padding: 8px 10px; white-space: pre-wrap; font-size: 12px; margin-top: 6px; }
+      .preview .count { display: block; color: var(--muted); margin-top: 4px; white-space: normal; }
+      .calendars { max-height: 112px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+      details { margin: 10px 0; }
+      summary { cursor: pointer; font-weight: 500; }
+      footer { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--line); background: #fff; }
+      footer .space { flex: 1; }
+      button { font: inherit; font-weight: 500; padding: 7px 14px; border-radius: 4px; border: 1px solid var(--line); background: #fff; color: var(--blue); cursor: pointer; }
+      button:hover { background: #f8fbff; }
+      button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+      button.primary:hover { background: var(--blue-dark); }
+      button:disabled { opacity: 0.55; cursor: default; }
+      a { color: var(--blue); }
+      .sub { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+      .inline-input { display: inline-block; width: 150px !important; padding: 3px 6px !important; }
+      .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="lead">A text to you for each response to <b id="formTitle"></b>, from your own phone. <span id="state" class="status">Off</span></p>
+      <div id="message" class="notice"></div>
+
+      <section class="card">
+        <h2>Your SMSTunnel key</h2>
+        <label for="apiKey">API key</label>
+        <div class="row">
+          <input class="grow" type="password" id="apiKey" autocomplete="off" spellcheck="false" placeholder="sk_live_…" />
+          <button type="button" id="checkKey">Check</button>
+        </div>
+        <p class="hint" id="keyState"></p>
+        <div class="error" data-error-for="apiKey"></div>
+        <label for="deviceId">Phone that sends the texts</label>
+        <select id="deviceId"></select>
+        <div class="error" data-error-for="deviceId"></div>
+        <p class="hint">
+          Your Android phone needs the <a href="https://play.google.com/store/apps/details?id=io.smstunnel.app">SMSTunnel app</a>.
+          Make a key in your <a href="https://dashboard.smstunnel.io/apps">SMSTunnel dashboard</a>: Apps → Add an app.
+          <button type="button" id="forgetKey" class="chip" hidden>Forget my key</button>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Texts to you</h2>
+        <label for="ownerNumbers">Your numbers</label>
+        <textarea id="ownerNumbers" rows="2" placeholder="+14155550123"></textarea>
+        <p class="hint">One per line, up to 5. Each number gets its own text.</p>
+        <div class="error" data-error-for="ownerNumbers"></div>
+        <label for="ownerMessage">The text</label>
+        <textarea id="ownerMessage" rows="3"></textarea>
+        <div class="chips" id="ownerChips"></div>
+        <div class="error" data-error-for="ownerMessage"></div>
+        <div class="preview" id="ownerPreview"></div>
+      </section>
+
+      <section class="card" id="confirmCard">
+        <label class="switch"><input type="checkbox" id="confirm" /> Also text a confirmation to the person who answered</label>
+        <div class="body">
+          <label for="phoneQuestionId">The question where they type their phone number</label>
+          <select id="phoneQuestionId"></select>
+          <div class="error" data-error-for="phoneQuestionId"></div>
+          <label for="consentQuestionId">Only when they tick this question (optional)</label>
+          <select id="consentQuestionId"></select>
+          <p class="hint">For example a checkbox "Text me a confirmation". Tell people in the form that you will text them.</p>
+          <div class="error" data-error-for="consentQuestionId"></div>
+          <label for="confirmMessage">The confirmation text</label>
+          <textarea id="confirmMessage" rows="2"></textarea>
+          <div class="chips" id="confirmChips"></div>
+          <div class="error" data-error-for="confirmMessage"></div>
+          <div class="preview" id="confirmPreview"></div>
+        </div>
+      </section>
+
+      <details>
+        <summary>More settings</summary>
+        <label for="countryCode">Country code for numbers written without one</label>
+        <input type="text" id="countryCode" placeholder="+1" />
+        <p class="hint">Used for numbers like 0722 123 456. Leave it empty when every number starts with +.</p>
+        <div class="error" data-error-for="countryCode"></div>
+        <p class="hint" id="timeZone"></p>
+      </details>
+    </main>
+    <footer>
+      <span class="space"></span>
+      <button type="button" id="close">Close</button>
+      <button type="button" id="save" class="primary">Save and turn on</button>
+    </footer>
+    <script>
+      /* The parts every SMSTunnel setup dialog shares. This runs in your browser, inside the dialog. */
+      var Dialog = (function () {
+        'use strict';
+
+        var ANY_PHONE = 'Any of my phones (the one that is online)';
+        var PLACEHOLDER = /\{\{\s*([^{}\r\n]{1,80}?)\s*\}\}|\{\s*([^{}\r\n]{1,80}?)\s*\}/g;
+        var GSM = /^[@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
+
+        function byId(id) {
+          return document.getElementById(id);
+        }
+
+        /** Calls a function of the script and resolves with its answer. */
+        function callServer(name) {
+          var args = Array.prototype.slice.call(arguments, 1);
+          return new Promise(function (resolve, reject) {
+            var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+            runner[name].apply(runner, args);
+          });
+        }
+
+        function errorText(err) {
+          var text = err && err.message ? err.message : String(err);
+          return text.replace(/^(Exception|Error|ScriptError):\s*/, '');
+        }
+
+        function say(text, kind) {
+          var box = byId('message');
+          box.textContent = text || '';
+          box.className = 'notice' + (kind ? ' ' + kind : '');
+          if (text) box.scrollIntoView({ block: 'nearest' });
+        }
+
+        function clearErrors() {
+          Array.prototype.forEach.call(document.querySelectorAll('[data-error-for]'), function (el) {
+            el.textContent = '';
+          });
+        }
+
+        /** Shows each error under its field; true when there was one. */
+        function showErrors(errors) {
+          clearErrors();
+          var first = null;
+          Object.keys(errors || {}).forEach(function (name) {
+            var el = document.querySelector('[data-error-for="' + name + '"]');
+            if (!el) return;
+            el.textContent = errors[name];
+            if (!first) first = el;
+          });
+          if (first) first.scrollIntoView({ block: 'center' });
+          return first !== null;
+        }
+
+        function busy(on) {
+          Array.prototype.forEach.call(document.querySelectorAll('button'), function (button) {
+            button.disabled = on;
+          });
+        }
+
+        function option(value, label) {
+          var el = document.createElement('option');
+          el.value = value;
+          el.textContent = label;
+          return el;
+        }
+
+        /** Fills a select with {value, label} items; keeps `selected` even when the list doesn't have it yet. */
+        function fillSelect(select, items, selected, emptyLabel) {
+          while (select.firstChild) select.removeChild(select.firstChild);
+          if (emptyLabel !== undefined) select.appendChild(option('', emptyLabel));
+          var found = false;
+          items.forEach(function (item) {
+            select.appendChild(option(item.value, item.label));
+            if (String(item.value) === String(selected || '')) found = true;
+          });
+          if (selected && !found) select.appendChild(option(selected, 'The one saved before (' + selected + ')'));
+          select.value = selected || '';
+        }
+
+        function val(id) {
+          var el = byId(id);
+          return el ? el.value : '';
+        }
+
+        function checked(id) {
+          var el = byId(id);
+          return !!(el && el.checked);
+        }
+
+        function set(id, value) {
+          var el = byId(id);
+          if (el) el.value = value === undefined || value === null ? '' : value;
+        }
+
+        function check(id, on) {
+          var el = byId(id);
+          if (el) el.checked = !!on;
+        }
+
+        function show(id, on) {
+          var el = byId(id);
+          if (el) el.hidden = !on;
+        }
+
+        /** Buttons that put {Name} into a text box where the cursor is. */
+        function chips(container, names, textarea, onChange) {
+          while (container.firstChild) container.removeChild(container.firstChild);
+          names.forEach(function (name) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'chip';
+            button.textContent = '{' + name + '}';
+            button.addEventListener('click', function () {
+              var start = textarea.selectionStart;
+              var end = textarea.selectionEnd;
+              var text = '{' + name + '}';
+              textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+              textarea.selectionStart = textarea.selectionEnd = start + text.length;
+              textarea.focus();
+              if (onChange) onChange();
+            });
+            container.appendChild(button);
+          });
+        }
+
+        function nameKey(name) {
+          return String(name).replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+
+        /** The same filling the script does, for the previews. */
+        function fill(template, values) {
+          return String(template || '').replace(PLACEHOLDER, function (match, a, b) {
+            var key = nameKey(a || b);
+            return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match;
+          });
+        }
+
+        /** "92 characters · 1 text message", the way phones split long texts. */
+        function sizeOf(text) {
+          var chars = Array.from(text).length;
+          if (!chars) return '';
+          var plain = GSM.test(text);
+          var parts = plain ? (chars <= 160 ? 1 : Math.ceil(chars / 153)) : chars <= 70 ? 1 : Math.ceil(chars / 67);
+          return chars + ' characters · ' + parts + (parts === 1 ? ' text message' : ' text messages (joined on the phone)');
+        }
+
+        function preview(el, text) {
+          while (el.firstChild) el.removeChild(el.firstChild);
+          el.appendChild(document.createTextNode(text || '(empty)'));
+          var count = document.createElement('span');
+          count.className = 'count';
+          count.textContent = sizeOf(text || '');
+          el.appendChild(count);
+        }
+
+        /** The key box, its Check button, "Forget my key" and the list of phones, the same in every dialog. */
+        function keyField(state, deviceId) {
+          var input = byId('apiKey');
+          var status = byId('keyState');
+          var select = byId('deviceId');
+          var forget = byId('forgetKey');
+          var saved = state || { saved: false, hint: '' };
+
+          function describe() {
+            status.className = 'hint';
+            status.textContent = saved.saved
+              ? 'A key is saved (' + saved.hint + '). Leave the box empty to keep it.'
+              : 'No key saved yet. Get one in your SMSTunnel dashboard: Apps → Add an app.';
+            if (forget) forget.hidden = !saved.saved;
+          }
+
+          function load(key) {
+            status.className = 'hint';
+            status.textContent = 'Checking the key…';
+            return callServer('smstunnelCheckKey', key)
+              .then(function (res) {
+                status.className = res.ok ? 'hint good' : 'hint bad';
+                status.textContent = res.ok ? (key ? 'The key works.' : 'The saved key (' + saved.hint + ') works.') : res.message;
+                if (res.ok && res.message) status.textContent += ' ' + res.message;
+                var phones = (res.phones || []).map(function (phone) {
+                  return { value: phone.id, label: phone.name + (phone.isOnline ? ' · online' : ' · offline') };
+                });
+                fillSelect(select, phones, select.value || deviceId, ANY_PHONE);
+              })
+              .catch(function (err) {
+                status.className = 'hint bad';
+                status.textContent = errorText(err);
+              });
+          }
+
+          fillSelect(select, [], deviceId, ANY_PHONE);
+          describe();
+          byId('checkKey').addEventListener('click', function () {
+            load(input.value.trim());
+          });
+          if (forget) {
+            forget.addEventListener('click', function () {
+              busy(true);
+              callServer('smstunnelForgetKey')
+                .then(function (next) {
+                  saved = next;
+                  input.value = '';
+                  describe();
+                  say('Your key is removed from this script. Texts stop until you paste a key again.', 'good');
+                })
+                .catch(function (err) {
+                  say(errorText(err), 'bad');
+                })
+                .then(function () {
+                  busy(false);
+                });
+            });
+          }
+          if (saved.saved) load('');
+        }
+
+        function close() {
+          google.script.host.close();
+        }
+
+        return {
+          byId: byId,
+          callServer: callServer,
+          errorText: errorText,
+          say: say,
+          clearErrors: clearErrors,
+          showErrors: showErrors,
+          busy: busy,
+          fillSelect: fillSelect,
+          val: val,
+          checked: checked,
+          set: set,
+          check: check,
+          show: show,
+          chips: chips,
+          nameKey: nameKey,
+          fill: fill,
+          sizeOf: sizeOf,
+          preview: preview,
+          keyField: keyField,
+          close: close,
+        };
+      })();
+    </script>
+    <script>
+      (function () {
+        var D = Dialog;
+        var data = null;
+
+        function sampleValues() {
+          var values = {};
+          values.form = data.formTitle;
+          values.time = '2026-11-02 09:30';
+          values.email = 'ana@example.com';
+          var lines = [];
+          data.questions.forEach(function (q, i) {
+            var sample = q.type === 'TEXT' && /phone|mobile|number|tel/i.test(q.title) ? '+14155550123' : i === 0 ? 'Ana' : 'answer ' + (i + 1);
+            values[D.nameKey(q.title)] = sample;
+            if (i < 4) lines.push(q.title + ': ' + sample);
+          });
+          values.answers = lines.join('\n');
+          return values;
+        }
+
+        function refresh() {
+          var values = sampleValues();
+          D.preview(D.byId('ownerPreview'), D.fill(D.val('ownerMessage'), values));
+          D.preview(D.byId('confirmPreview'), D.fill(D.val('confirmMessage'), values));
+          D.byId('confirmCard').className = D.checked('confirm') ? 'card' : 'card off';
+        }
+
+        function fillQuestions() {
+          var text = data.questions
+            .filter(function (q) {
+              return q.type === 'TEXT';
+            })
+            .map(function (q) {
+              return { value: q.id, label: q.title };
+            });
+          var all = data.questions.map(function (q) {
+            return { value: q.id, label: q.title };
+          });
+          D.fillSelect(D.byId('phoneQuestionId'), text, data.settings.phoneQuestionId, 'Choose a short-answer question');
+          D.fillSelect(D.byId('consentQuestionId'), all, data.settings.consentQuestionId, 'No extra question');
+          var names = data.special.concat(
+            data.questions.map(function (q) {
+              return q.title;
+            })
+          );
+          D.chips(D.byId('ownerChips'), names, D.byId('ownerMessage'), refresh);
+          D.chips(D.byId('confirmChips'), names, D.byId('confirmMessage'), refresh);
+        }
+
+        function load() {
+          D.callServer('smstunnelGetSetupData')
+            .then(function (res) {
+              data = res;
+              var s = res.settings;
+              D.byId('formTitle').textContent = res.formTitle;
+              D.byId('state').textContent = res.on ? 'On' : 'Off';
+              D.byId('state').className = res.on ? 'status on' : 'status';
+              if (res.setup === 'other') D.say('Another editor of this form has set up these texts. If you save, your setup takes over and theirs stops.', '');
+              D.set('ownerNumbers', s.ownerNumbers);
+              D.set('ownerMessage', s.ownerMessage);
+              D.check('confirm', s.confirm);
+              D.set('confirmMessage', s.confirmMessage);
+              D.set('countryCode', s.countryCode);
+              D.byId('timeZone').textContent = 'Times in texts use the time zone ' + res.timeZone + ' (Apps Script → Project Settings to change it).';
+              fillQuestions();
+              D.keyField(res.key, s.deviceId);
+              refresh();
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            });
+        }
+
+        function collect() {
+          return {
+            apiKey: D.val('apiKey').trim(),
+            deviceId: D.val('deviceId'),
+            ownerNumbers: D.val('ownerNumbers'),
+            ownerMessage: D.val('ownerMessage'),
+            confirm: D.checked('confirm'),
+            phoneQuestionId: D.val('phoneQuestionId'),
+            consentQuestionId: D.val('consentQuestionId'),
+            confirmMessage: D.val('confirmMessage'),
+            countryCode: D.val('countryCode'),
+          };
+        }
+
+        D.byId('save').addEventListener('click', function () {
+          D.busy(true);
+          D.say('Saving…');
+          D.clearErrors();
+          D.callServer('smstunnelSaveSetup', collect())
+            .then(function (res) {
+              if (!res.ok) {
+                D.showErrors(res.errors);
+                D.say('Please check the fields marked in red.', 'bad');
+                return;
+              }
+              D.set('apiKey', '');
+              D.byId('state').textContent = 'On';
+              D.byId('state').className = 'status on';
+              D.say(res.message, 'good');
+            })
+            .catch(function (err) {
+              D.say(D.errorText(err), 'bad');
+            })
+            .then(function () {
+              D.busy(false);
+            });
+        });
+        D.byId('close').addEventListener('click', D.close);
+        ['ownerMessage', 'confirmMessage'].forEach(function (id) {
+          D.byId(id).addEventListener('input', refresh);
+        });
+        D.byId('confirm').addEventListener('change', refresh);
+        load();
+      })();
+    </script>
+  </body>
+</html>
